@@ -4,7 +4,7 @@
 
 I built a multi-tenant Kubernetes demo that mirrors a SaaS platform: a tiny FastAPI app deployed to two tenant namespaces via Helm and Argo CD, with GitHub Actions and GitLab CI pipelines, plus Prometheus, Grafana, and Loki for observability. It is intentionally small but realistic, showing CI/CD, GitOps, and tenant-aware monitoring end to end.
 
-## 2-minute pitch (memorize-friendly)
+## 2-minute pitch 
 
 This repo is a compact, interview-ready platform demo that maps directly to your internship scope. It packages a FastAPI service with `/`, `/health`, and `/metrics`, then deploys it twice into `tenant-a` and `tenant-b` namespaces using a Helm chart and Argo CD. The same image runs for both tenants, but the Helm values inject a tenant name so the API responses and metrics are tenant-labeled.
 
@@ -12,7 +12,7 @@ On the CI/CD side, GitHub Actions runs lint and tests, builds a container, pushe
 
 For observability, kube-prometheus-stack scrapes each tenant via ServiceMonitor, Grafana visualizes request rate, latency, and namespace resource usage, and Loki provides per-tenant log queries. The result is a small but complete system that demonstrates CI/CD, Kubernetes deployment management, GitOps flows, and monitoring tradeoffs in a way that is easy to run locally.
 
-## 5-minute walkthrough (step-by-step narrative)
+## Walkthrough (step-by-step narrative)
 
 1) Start at the app: `app/main.py` is a tiny FastAPI service with `/`, `/health`, and `/metrics`. It adds Prometheus counters and latency histograms and logs each request with the tenant name.
 2) Containerize: `Dockerfile` builds a minimal image. This mirrors how the CI system will publish artifacts.
@@ -25,7 +25,7 @@ For observability, kube-prometheus-stack scrapes each tenant via ServiceMonitor,
 7) Observability: `observability/helm-values/*` installs kube-prometheus-stack and Loki. The chart’s ServiceMonitor uses a release label that matches the Prometheus selector so each tenant is scraped. Grafana uses a tenant dashboard from `observability/grafana/dashboards/tenant-overview.json`.
 8) Run locally: `scripts/` provide idempotent setup for k3d, Argo CD, observability, and GitOps deployment. The `docs/RUNBOOK.md` gives exact commands.
 
-## If they ask deeper
+## Insights 
 
 ### CI/CD
 - Why a PR step? It creates an audit trail and aligns with GitOps, so the cluster changes are always visible and reviewable.
@@ -47,7 +47,7 @@ For observability, kube-prometheus-stack scrapes each tenant via ServiceMonitor,
 - GitOps PRs are slower than direct deploys, but they improve traceability and reduce config drift.
 - Centralized observability is easy to manage but may need stronger tenancy controls in production.
 
-## Likely interview questions + sample answers
+## Questions + sample answers
 
 1) Why use GitOps for such a small demo?
 - It mirrors how production systems avoid config drift and make changes auditable. Even in a demo, it shows the workflow: build artifact -> change Git -> reconciler applies it.
