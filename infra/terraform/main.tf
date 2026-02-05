@@ -33,11 +33,7 @@ resource "null_resource" "bootstrap" {
       "set -e",
       "if ! command -v k3s >/dev/null 2>&1; then curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='--disable traefik' sh -; fi",
       "sudo systemctl enable --now k3s",
-      "if [ \"${var.VPS_USER}\" = \"root\" ]; then HOME_DIR=\"/root\"; else HOME_DIR=\"/home/${var.VPS_USER}\"; fi",
-      "sudo cp /etc/rancher/k3s/k3s.yaml ${HOME_DIR}/k3s.yaml",
-      "if [ \"${var.VPS_USER}\" = \"root\" ]; then sudo chown root:root ${HOME_DIR}/k3s.yaml; else sudo chown ${var.VPS_USER}:${var.VPS_USER} ${HOME_DIR}/k3s.yaml; fi",
-      "chmod 600 ${HOME_DIR}/k3s.yaml",
-      "export KUBECONFIG=${HOME_DIR}/k3s.yaml",
+      "export KUBECONFIG=/etc/rancher/k3s/k3s.yaml",
       "if ! command -v helm >/dev/null 2>&1; then curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash; fi",
       "helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx || true",
       "helm repo add argo https://argoproj.github.io/argo-helm || true",
@@ -56,7 +52,7 @@ resource "null_resource" "bootstrap" {
       set -e
       TMP_KCFG="${path.module}/k3s.yaml"
       FINAL_KCFG="${path.module}/kubeconfig.yaml"
-      scp -o StrictHostKeyChecking=no -i "${var.SSH_KEY_PATH}" "${var.VPS_USER}@${var.VPS_IP}:/home/${var.VPS_USER}/k3s.yaml" "$TMP_KCFG"
+      scp -o StrictHostKeyChecking=no -i "${var.SSH_KEY_PATH}" "${var.VPS_USER}@${var.VPS_IP}:/etc/rancher/k3s/k3s.yaml" "$TMP_KCFG"
       sed "s/127.0.0.1/${var.VPS_IP}/" "$TMP_KCFG" > "$FINAL_KCFG"
       rm -f "$TMP_KCFG"
       echo "Wrote kubeconfig to $FINAL_KCFG"
