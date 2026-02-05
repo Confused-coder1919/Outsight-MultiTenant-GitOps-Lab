@@ -25,7 +25,7 @@ resource "null_resource" "bootstrap" {
     type        = "ssh"
     host        = var.VPS_IP
     user        = var.VPS_USER
-    private_key = file(var.SSH_KEY_PATH)
+    agent       = true
   }
 
   provisioner "remote-exec" {

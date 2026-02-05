@@ -23,6 +23,12 @@ common platform addons. It is intentionally small and idempotent for demo purpos
   - `30000` (Grafana NodePort)
   - `80/443` (optional, if you later expose Ingress)
 
+If your SSH key is passphrase-protected, ensure `ssh-agent` is running:
+
+```bash
+eval "$(ssh-agent -s)" && ssh-add ~/.ssh/hostinger_ed25519
+```
+
 ## Variables
 
 - `VPS_IP` — public IP address of the VPS
