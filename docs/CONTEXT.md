@@ -85,7 +85,7 @@ realistic and runnable locally on k3d or Docker Desktop.
 - `infra/terraform/` bootstraps a single VPS into k3s and installs ingress-nginx,
   Argo CD, kube-prometheus-stack, and loki-stack.
 - Terraform also bootstraps Argo CD GitOps by applying the tenant Applications from
-  `gitops/argocd/` (or generating minimal ones if missing) using the provided
+  `gitops/argocd/` as-is (or generating minimal ones if missing) using the provided
   `GITOPS_REPO` and `GITOPS_REVISION`.
 - Security hardening: kubeconfig is copied to the SSH user's home with `600` perms
   (no world-readable `/etc/rancher/k3s/k3s.yaml`).

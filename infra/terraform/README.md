@@ -99,9 +99,10 @@ Run them after `terraform apply` to print the passwords.
 After `terraform apply`, Argo CD will be bootstrapped with tenant Applications using the
 repo you provided via `GITOPS_REPO`:
 
-- If `gitops/argocd/*.yaml` exists, those manifests are applied and patched with the repo
-  URL and revision.
-- If they don't exist, minimal tenant-a/tenant-b Applications are generated and applied.
+- If `gitops/argocd/*.yaml` exists, those manifests are applied as-is. Ensure the repo URL
+  and revision are correct in those files.
+- If they don't exist, minimal tenant-a/tenant-b Applications are generated using
+  `GITOPS_REPO` and `GITOPS_REVISION`.
 
 ## Notes
 

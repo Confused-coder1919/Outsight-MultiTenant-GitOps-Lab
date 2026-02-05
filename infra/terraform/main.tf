@@ -59,29 +59,11 @@ resource "null_resource" "bootstrap" {
       export KUBECONFIG="$FINAL_KCFG"
 
       ARGO_DIR="${path.module}/../../gitops/argocd"
-      TMP_DIR="$(mktemp -d)"
       if [ -d "$ARGO_DIR" ] && ls "$ARGO_DIR"/*.yaml >/dev/null 2>&1; then
-        echo "Applying Argo CD Applications from $ARGO_DIR"
-        for f in "$ARGO_DIR"/*.yaml; do
-          cp "$f" "$TMP_DIR/$(basename "$f")"
-          python3 - "$TMP_DIR/$(basename "$f")" "${var.GITOPS_REPO}" "${var.GITOPS_REVISION}" <<'PY'
-import pathlib
-import re
-import sys
-
-path, repo, rev = sys.argv[1:]
-text = pathlib.Path(path).read_text()
-text = re.sub(r'(^\\s*repoURL:\\s*).*$',
-              lambda m: f\"{m.group(1)}{repo}\",
-              text, flags=re.MULTILINE)
-text = re.sub(r'(^\\s*targetRevision:\\s*).*$',
-              lambda m: f\"{m.group(1)}{rev}\",
-              text, flags=re.MULTILINE)
-pathlib.Path(path).write_text(text)
-PY
-          kubectl apply -f "$TMP_DIR/$(basename "$f")"
-        done
+        echo "Applying Argo CD Applications from $ARGO_DIR (as-is)"
+        kubectl apply -f "$ARGO_DIR"
       else
+        TMP_DIR="$(mktemp -d)"
         echo "No Argo CD manifests found under $ARGO_DIR. Creating minimal Applications."
         cat <<EOF > "$TMP_DIR/tenant-a-app.yaml"
 apiVersion: argoproj.io/v1alpha1
@@ -135,8 +117,8 @@ spec:
 EOF
         kubectl apply -f "$TMP_DIR/tenant-a-app.yaml"
         kubectl apply -f "$TMP_DIR/tenant-b-app.yaml"
+        rm -rf "$TMP_DIR"
       fi
-      rm -rf "$TMP_DIR"
     EOT
   }
 }
