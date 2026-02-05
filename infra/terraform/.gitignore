@@ -1,0 +1,6 @@
+kubeconfig.yaml
+k3s.yaml
+*.tfstate
+*.tfstate.*
+.terraform/
+crash.log

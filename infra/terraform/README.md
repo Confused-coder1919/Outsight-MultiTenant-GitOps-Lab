@@ -17,7 +17,11 @@ common platform addons. It is intentionally small and idempotent for demo purpos
 - Terraform >= 1.5
 - SSH access to the VPS
 - A user with `sudo` privileges
-- Open firewall ports (for NodePorts below)
+- Open firewall ports:
+  - `22` (SSH)
+  - `30443` (Argo CD NodePort)
+  - `30000` (Grafana NodePort)
+  - `80/443` (optional, if you later expose Ingress)
 
 ## Variables
 
@@ -67,8 +71,16 @@ Outputs:
 - `argocd_url` -> https://<VPS_IP>:30443
 - `grafana_url` -> http://<VPS_IP>:30000
 
-> Note: These are NodePorts for simplicity. In production you would normally expose
-> services behind an Ingress and TLS.
+> Note: These are NodePorts for simplicity. In production, prefer Ingress + TLS.
+
+## Admin password commands
+
+Terraform outputs command strings for initial admin credentials:
+
+- `argocd_initial_admin_password_command`
+- `grafana_admin_password_command`
+
+Run them after `terraform apply` to print the passwords.
 
 ## Notes
 

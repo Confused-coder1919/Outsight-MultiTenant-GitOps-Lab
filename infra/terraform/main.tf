@@ -31,20 +31,22 @@ resource "null_resource" "bootstrap" {
   provisioner "remote-exec" {
     inline = [
       "set -e",
-      "if ! command -v k3s >/dev/null 2>&1; then curl -sfL https://get.k3s.io | sh -; fi",
+      "if ! command -v k3s >/dev/null 2>&1; then curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC='--disable traefik' sh -; fi",
       "sudo systemctl enable --now k3s",
-      "sudo chmod 644 /etc/rancher/k3s/k3s.yaml",
-      "export KUBECONFIG=/etc/rancher/k3s/k3s.yaml",
+      "sudo cp /etc/rancher/k3s/k3s.yaml /home/${var.VPS_USER}/k3s.yaml",
+      "sudo chown ${var.VPS_USER}:${var.VPS_USER} /home/${var.VPS_USER}/k3s.yaml",
+      "chmod 600 /home/${var.VPS_USER}/k3s.yaml",
+      "export KUBECONFIG=/home/${var.VPS_USER}/k3s.yaml",
       "if ! command -v helm >/dev/null 2>&1; then curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash; fi",
       "helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx || true",
       "helm repo add argo https://argoproj.github.io/argo-helm || true",
       "helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true",
       "helm repo add grafana https://grafana.github.io/helm-charts || true",
       "helm repo update",
-      "helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx --namespace ingress-nginx --create-namespace",
-      "helm upgrade --install argocd argo/argo-cd --namespace argocd --create-namespace --set server.service.type=NodePort --set server.service.nodePortHttp=30080 --set server.service.nodePortHttps=30443",
-      "helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack --namespace observability --create-namespace --set grafana.service.type=NodePort --set grafana.service.nodePort=30000",
-      "helm upgrade --install loki grafana/loki-stack --namespace observability --create-namespace --set grafana.enabled=false --set loki.isDefault=false --set promtail.enabled=true"
+      "helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx --namespace ingress-nginx --create-namespace --wait --timeout 10m",
+      "helm upgrade --install argocd argo/argo-cd --namespace argocd --create-namespace --set server.service.type=NodePort --set server.service.nodePortHttp=30080 --set server.service.nodePortHttps=30443 --wait --timeout 10m",
+      "helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack --namespace observability --create-namespace --set grafana.service.type=NodePort --set grafana.service.nodePort=30000 --wait --timeout 10m",
+      "helm upgrade --install loki grafana/loki-stack --namespace observability --create-namespace --set grafana.enabled=false --set loki.isDefault=false --set promtail.enabled=true --wait --timeout 10m"
     ]
   }
 
@@ -53,7 +55,7 @@ resource "null_resource" "bootstrap" {
       set -e
       TMP_KCFG="${path.module}/k3s.yaml"
       FINAL_KCFG="${path.module}/kubeconfig.yaml"
-      scp -o StrictHostKeyChecking=no -i "${var.SSH_KEY_PATH}" "${var.VPS_USER}@${var.VPS_IP}:/etc/rancher/k3s/k3s.yaml" "$TMP_KCFG"
+      scp -o StrictHostKeyChecking=no -i "${var.SSH_KEY_PATH}" "${var.VPS_USER}@${var.VPS_IP}:/home/${var.VPS_USER}/k3s.yaml" "$TMP_KCFG"
       sed "s/127.0.0.1/${var.VPS_IP}/" "$TMP_KCFG" > "$FINAL_KCFG"
       rm -f "$TMP_KCFG"
       echo "Wrote kubeconfig to $FINAL_KCFG"
