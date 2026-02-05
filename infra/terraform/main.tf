@@ -59,6 +59,87 @@ resource "null_resource" "bootstrap" {
       sed "s/127.0.0.1/${var.VPS_IP}/" "$TMP_KCFG" > "$FINAL_KCFG"
       rm -f "$TMP_KCFG"
       echo "Wrote kubeconfig to $FINAL_KCFG"
+      export KUBECONFIG="$FINAL_KCFG"
+
+      ARGO_DIR="${path.module}/../../gitops/argocd"
+      TMP_DIR="$(mktemp -d)"
+      if [ -d "$ARGO_DIR" ] && ls "$ARGO_DIR"/*.yaml >/dev/null 2>&1; then
+        echo "Applying Argo CD Applications from $ARGO_DIR"
+        for f in "$ARGO_DIR"/*.yaml; do
+          cp "$f" "$TMP_DIR/$(basename "$f")"
+          python3 - "$TMP_DIR/$(basename "$f")" "${var.GITOPS_REPO}" "${var.GITOPS_REVISION}" <<'PY'
+import pathlib
+import re
+import sys
+
+path, repo, rev = sys.argv[1:]
+text = pathlib.Path(path).read_text()
+text = re.sub(r'(^\\s*repoURL:\\s*).*$',
+              lambda m: f\"{m.group(1)}{repo}\",
+              text, flags=re.MULTILINE)
+text = re.sub(r'(^\\s*targetRevision:\\s*).*$',
+              lambda m: f\"{m.group(1)}{rev}\",
+              text, flags=re.MULTILINE)
+pathlib.Path(path).write_text(text)
+PY
+          kubectl apply -f "$TMP_DIR/$(basename "$f")"
+        done
+      else
+        echo "No Argo CD manifests found under $ARGO_DIR. Creating minimal Applications."
+        cat <<EOF > "$TMP_DIR/tenant-a-app.yaml"
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-api-tenant-a
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: ${var.GITOPS_REPO}
+    targetRevision: ${var.GITOPS_REVISION}
+    path: charts/demo-api
+    helm:
+      valueFiles:
+        - tenants/tenant-a-values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: tenant-a
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+EOF
+        cat <<EOF > "$TMP_DIR/tenant-b-app.yaml"
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-api-tenant-b
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: ${var.GITOPS_REPO}
+    targetRevision: ${var.GITOPS_REVISION}
+    path: charts/demo-api
+    helm:
+      valueFiles:
+        - tenants/tenant-b-values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: tenant-b
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+EOF
+        kubectl apply -f "$TMP_DIR/tenant-a-app.yaml"
+        kubectl apply -f "$TMP_DIR/tenant-b-app.yaml"
+      fi
+      rm -rf "$TMP_DIR"
     EOT
   }
 }

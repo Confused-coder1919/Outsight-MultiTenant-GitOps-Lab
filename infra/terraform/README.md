@@ -28,6 +28,8 @@ common platform addons. It is intentionally small and idempotent for demo purpos
 - `VPS_IP` — public IP address of the VPS
 - `VPS_USER` — SSH user with sudo privileges
 - `SSH_KEY_PATH` — path to the private SSH key
+- `GITOPS_REPO` — public Git repo URL for Argo CD (this repo or your fork)
+- `GITOPS_REVISION` — Git revision to track (default: `main`)
 
 You can set them via env vars:
 
@@ -35,6 +37,8 @@ You can set them via env vars:
 export TF_VAR_VPS_IP="203.0.113.10"
 export TF_VAR_VPS_USER="ubuntu"
 export TF_VAR_SSH_KEY_PATH="$HOME/.ssh/id_rsa"
+export TF_VAR_GITOPS_REPO="https://github.com/you/outsight-platform-devops-demo.git"
+export TF_VAR_GITOPS_REVISION="main"
 ```
 
 Or create a `terraform.tfvars`:
@@ -43,6 +47,8 @@ Or create a `terraform.tfvars`:
 VPS_IP       = "203.0.113.10"
 VPS_USER     = "ubuntu"
 SSH_KEY_PATH = "/home/me/.ssh/id_rsa"
+GITOPS_REPO  = "https://github.com/you/outsight-platform-devops-demo.git"
+GITOPS_REVISION = "main"
 ```
 
 ## Run
@@ -81,6 +87,15 @@ Terraform outputs command strings for initial admin credentials:
 - `grafana_admin_password_command`
 
 Run them after `terraform apply` to print the passwords.
+
+## GitOps bootstrap
+
+After `terraform apply`, Argo CD will be bootstrapped with tenant Applications using the
+repo you provided via `GITOPS_REPO`:
+
+- If `gitops/argocd/*.yaml` exists, those manifests are applied and patched with the repo
+  URL and revision.
+- If they don't exist, minimal tenant-a/tenant-b Applications are generated and applied.
 
 ## Notes
 
