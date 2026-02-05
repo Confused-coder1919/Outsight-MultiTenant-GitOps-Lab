@@ -10,8 +10,9 @@ realistic and runnable locally on k3d or Docker Desktop.
 ## High-level flow
 
 1) Developer pushes code.
-2) CI runs lint/tests; on `main` it builds the image, pushes to GHCR (lowercased repo),
-   and opens a PR updating tenant image tags in `gitops/tenants/*-values.yaml`.
+2) CI runs lint/tests; on `main` it builds a multi-arch image (`amd64` + `arm64`),
+   pushes immutable and moving tags to GHCR, then opens a PR updating tenant image tags in
+   `charts/demo-api/tenants/*-values.yaml`.
 3) Argo CD watches the repo and syncs the Helm chart with tenant values from
    `charts/demo-api/tenants/` (local-safe path).
 4) Prometheus scrapes each tenant via ServiceMonitor; Grafana dashboards visualize metrics;
@@ -51,9 +52,9 @@ realistic and runnable locally on k3d or Docker Desktop.
 
 - GitHub Actions: `.github/workflows/ci.yml`
   - PRs: lint + tests only.
-  - Push to `main`: build/push image to GHCR, update tenant image tag values,
-    open a PR for GitOps changes.
-  - Image repo is computed in lowercase and used consistently for build/push/values.
+  - Push to `main`: build/push multi-arch image to GHCR with tags `sha-<shortsha>`,
+    `main`, and `dev`, then open a GitOps PR for tenant value bumps.
+  - GitOps promotion updates `charts/demo-api/tenants/*-values.yaml` only.
 - GitLab CI: `.gitlab-ci.yml`
   - Mirrors lint/test/build/push stages for parity.
 
@@ -87,8 +88,8 @@ realistic and runnable locally on k3d or Docker Desktop.
 - Terraform also bootstraps Argo CD GitOps by applying the tenant Applications from
   `gitops/argocd/` as-is (or generating minimal ones if missing) using the provided
   `GITOPS_REPO` and `GITOPS_REVISION`.
-- Security hardening: kubeconfig is copied to the SSH user's home with `600` perms
-  (no world-readable `/etc/rancher/k3s/k3s.yaml`).
+- Security note: Terraform uses `/etc/rancher/k3s/k3s.yaml` on the VPS for cluster ops and
+  securely copies it locally into `infra/terraform/kubeconfig.yaml`.
 - k3s installs with Traefik disabled (`--disable traefik`) since ingress-nginx is used.
 
 ## Docs
