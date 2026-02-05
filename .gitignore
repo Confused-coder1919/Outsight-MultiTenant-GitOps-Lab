@@ -3,3 +3,12 @@ __pycache__/
 .venv/
 .env
 .DS_Store
+
+# Terraform / kube artifacts
+infra/terraform/kubeconfig.yaml
+infra/terraform/k3s.yaml
+**/*.tfstate
+**/*.tfstate.*
+**/.terraform/
+.kube/
+*.log

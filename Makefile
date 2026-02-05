@@ -2,7 +2,8 @@ APP_NAME := demo-api
 IMAGE_NAME ?= ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-api
 TAG ?= dev
 
-.PHONY: lint test run docker-build docker-run k3d argocd observability gitops
+.PHONY: lint test run docker-build docker-run k3d argocd observability gitops \
+	vps-up vps-verify vps-down local-up local-verify help
 
 lint:
 	ruff check .
@@ -30,3 +31,35 @@ observability:
 
 gitops:
 	./scripts/deploy_gitops.sh
+
+vps-up:
+	./scripts/bootstrap_vps.sh
+
+vps-verify:
+	KUBECONFIG=$(PWD)/infra/terraform/kubeconfig.yaml ./scripts/verify.sh
+
+vps-down:
+	@read -p "This will destroy the VPS k3s stack. Continue? [y/N] " ans; \
+	if [ "$$ans" != "y" ] && [ "$$ans" != "Y" ]; then echo "Aborted."; exit 1; fi; \
+	cd infra/terraform && terraform destroy
+
+local-up:
+	./scripts/run_local_k3d.sh
+
+local-verify:
+	@CLUSTER_NAME=$${CLUSTER_NAME:-outsight-demo}; \
+	K3D_KUBECONFIG="$$HOME/.k3d/kubeconfig-$$CLUSTER_NAME.yaml"; \
+	if [ ! -f "$$K3D_KUBECONFIG" ]; then k3d kubeconfig write "$$CLUSTER_NAME" >/dev/null; fi; \
+	KUBECONFIG="$$K3D_KUBECONFIG" ./scripts/verify.sh
+
+help:
+	@echo "Usage:"; \
+	echo "  make k3d              Create local k3d cluster"; \
+	echo "  make observability    Install Prometheus/Grafana/Loki"; \
+	echo "  make argocd           Install Argo CD"; \
+	echo "  make gitops           Apply Argo Applications"; \
+	echo "  make vps-up           Bootstrap VPS via Terraform"; \
+	echo "  make vps-verify       Verify VPS deployment"; \
+	echo "  make vps-down         Destroy VPS stack (prompted)"; \
+	echo "  make local-up         Run full demo locally"; \
+	echo "  make local-verify     Verify local deployment"
