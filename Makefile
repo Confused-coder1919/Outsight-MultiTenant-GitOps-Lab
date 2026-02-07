@@ -3,7 +3,8 @@ IMAGE_NAME ?= ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-api
 TAG ?= dev
 
 .PHONY: lint test run docker-build docker-run k3d argocd observability gitops \
-	vps-up vps-verify vps-down local-up local-verify canary-demo help
+	vps-up vps-verify vps-down local-up local-verify vps-status \
+	canary-demo canary-success demo-traffic help
 
 lint:
 	ruff check .
@@ -55,6 +56,15 @@ local-verify:
 canary-demo:
 	./scripts/canary_demo.sh
 
+canary-success:
+	./scripts/canary_success.sh
+
+demo-traffic:
+	./scripts/loadgen.sh --duration $${DURATION_SECONDS:-60}
+
+vps-status:
+	./scripts/vps_status.sh
+
 help:
 	@echo "Usage:"; \
 	echo "  make k3d              Create local k3d cluster"; \
@@ -64,6 +74,9 @@ help:
 	echo "  make vps-up           Bootstrap VPS via Terraform"; \
 	echo "  make vps-verify       Verify VPS deployment"; \
 	echo "  make vps-down         Destroy VPS stack (prompted)"; \
+	echo "  make vps-status       Show VPS cluster/apps/rollout status"; \
 	echo "  make local-up         Run full demo locally"; \
 	echo "  make local-verify     Verify local deployment"; \
-	echo "  make canary-demo      Trigger canary failure and rollback demo"
+	echo "  make canary-demo      Trigger canary failure and rollback demo"; \
+	echo "  make canary-success   Run healthy canary progression demo"; \
+	echo "  make demo-traffic     Generate healthy traffic for both tenants"

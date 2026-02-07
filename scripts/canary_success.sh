@@ -5,11 +5,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TENANT="${TENANT:-tenant-a}"
 VALUES_FILE="${ROOT_DIR}/charts/demo-api/tenants/${TENANT}-values.yaml"
 ROLLOUT_NAME="${ROLLOUT_NAME:-demo-api}"
-CANARY_TAG="${CANARY_TAG:-}"
+SUCCESS_TAG="${SUCCESS_TAG:-main}"
 WAIT_SECONDS="${WAIT_SECONDS:-300}"
 TRAFFIC_SECONDS="${TRAFFIC_SECONDS:-150}"
-HEALTHY_RPS="${HEALTHY_RPS:-3}"
-ERROR_RPS="${ERROR_RPS:-5}"
+HEALTHY_RPS="${HEALTHY_RPS:-4}"
 
 if [[ -z "${KUBECONFIG:-}" && -f "${ROOT_DIR}/infra/terraform/kubeconfig.yaml" ]]; then
   export KUBECONFIG="${ROOT_DIR}/infra/terraform/kubeconfig.yaml"
@@ -59,17 +58,17 @@ if [[ -z "$CURRENT_TAG" ]]; then
   exit 1
 fi
 
-TARGET_TAG="$CURRENT_TAG"
-if [[ -n "$CANARY_TAG" ]]; then
-  TARGET_TAG="$CANARY_TAG"
+if [[ "$SUCCESS_TAG" == "$CURRENT_TAG" ]]; then
+  echo "SUCCESS_TAG (${SUCCESS_TAG}) matches current tag (${CURRENT_TAG}). Set SUCCESS_TAG to a different known-good tag." >&2
+  exit 1
 fi
 
 OVERRIDE_FILE="$(mktemp)"
 cat >"$OVERRIDE_FILE" <<YAML
 demoFailureEndpoint:
-  enabled: true
+  enabled: false
 image:
-  tag: "$TARGET_TAG"
+  tag: "$SUCCESS_TAG"
 YAML
 
 loadgen_pid=""
@@ -82,7 +81,7 @@ cleanup() {
   fi
 
   if [[ "$revert_needed" == true ]]; then
-    echo "Reverting ${TENANT} rollout to chart values..."
+    echo "Reverting ${TENANT} to chart values after interruption/failure..."
     helm template demo-api "${ROOT_DIR}/charts/demo-api" -n "$TENANT" -f "$VALUES_FILE" \
       | kubectl -n "$TENANT" apply -f - >/dev/null
   fi
@@ -91,22 +90,19 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "Applying canary-failure config for ${TENANT} (tag=${TARGET_TAG}, failure endpoint enabled)..."
+echo "Applying candidate tag ${SUCCESS_TAG} to ${TENANT}..."
 helm template demo-api "${ROOT_DIR}/charts/demo-api" -n "$TENANT" -f "$VALUES_FILE" -f "$OVERRIDE_FILE" \
   | kubectl -n "$TENANT" apply -f - >/dev/null
 
-echo "Generating healthy+error traffic to trigger analysis failure..."
+echo "Generating healthy traffic during canary analysis window..."
 "${ROOT_DIR}/scripts/loadgen.sh" \
   --tenant "$TENANT" \
   --duration "$TRAFFIC_SECONDS" \
-  --healthy-rps "$HEALTHY_RPS" \
-  --error-tenant "$TENANT" \
-  --error-rps "$ERROR_RPS" \
-  --error-code 500 &
+  --healthy-rps "$HEALTHY_RPS" &
 loadgen_pid="$!"
 
 start_time="$(date +%s)"
-failed=false
+completed=false
 
 while true; do
   phase="$(kubectl -n "$TENANT" get rollout "$ROLLOUT_NAME" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
@@ -115,16 +111,19 @@ while true; do
 
   if [[ -n "$latest_analysis" ]]; then
     analysis_phase="$(kubectl -n "$TENANT" get analysisrun "$latest_analysis" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+    if [[ "$analysis_phase" == "Failed" || "$analysis_phase" == "Error" || "$analysis_phase" == "Inconclusive" ]]; then
+      echo "Canary analysis failed unexpectedly: ${analysis_phase}" >&2
+      exit 1
+    fi
   fi
 
-  if [[ "$phase" == "Degraded" || "$analysis_phase" == "Failed" || "$analysis_phase" == "Error" || "$analysis_phase" == "Inconclusive" ]]; then
-    echo "Observed failing canary signal: rollout_phase=${phase:-unknown}, analysis_phase=${analysis_phase:-none}"
-    failed=true
+  if [[ "$phase" == "Healthy" ]]; then
+    completed=true
     break
   fi
 
   if (( $(date +%s) - start_time > WAIT_SECONDS )); then
-    echo "Timed out waiting for failing canary signal after ${WAIT_SECONDS}s." >&2
+    echo "Timed out waiting for healthy rollout after ${WAIT_SECONDS}s." >&2
     break
   fi
 
@@ -143,9 +142,10 @@ fi
 
 kubectl -n "$TENANT" get analysisrun --sort-by=.metadata.creationTimestamp | tail -n 5 || true
 
-if [[ "$failed" != true ]]; then
-  echo "Canary did not degrade as expected." >&2
+if [[ "$completed" != true ]]; then
+  echo "Canary success demo did not reach Healthy state." >&2
   exit 1
 fi
 
-echo "Canary failure demo completed. Cleanup will restore chart values."
+echo "Canary success demo completed for ${TENANT} with tag ${SUCCESS_TAG}."
+revert_needed=false

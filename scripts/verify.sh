@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ -z "${KUBECONFIG:-}" ]]; then
-  echo "KUBECONFIG is not set. Export KUBECONFIG before running." >&2
-  exit 1
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ -z "${KUBECONFIG:-}" && -f "${ROOT_DIR}/infra/terraform/kubeconfig.yaml" ]]; then
+  export KUBECONFIG="${ROOT_DIR}/infra/terraform/kubeconfig.yaml"
 fi
 
 require_cmd() {
@@ -21,8 +21,26 @@ echo "Cluster overview:"
 kubectl get nodes
 kubectl get ns
 kubectl -n argocd get applications.argoproj.io -o wide
+kubectl get rollout -A
 kubectl -n tenant-a get pods,svc
 kubectl -n tenant-b get pods,svc
+
+assert_namespace_healthy() {
+  local ns="$1"
+  local not_running
+  not_running="$(kubectl -n "$ns" get pods --no-headers 2>/dev/null | awk '$3 != "Running" && $3 != "Completed" {print $1 ":" $3}')"
+  if [[ -n "$not_running" ]]; then
+    echo "Found non-running pods in ${ns}: ${not_running}" >&2
+    exit 1
+  fi
+  kubectl -n "$ns" get rollout demo-api >/dev/null 2>&1 || {
+    echo "Missing rollout demo-api in ${ns}" >&2
+    exit 1
+  }
+}
+
+assert_namespace_healthy tenant-a
+assert_namespace_healthy tenant-b
 
 pids=()
 cleanup() {
