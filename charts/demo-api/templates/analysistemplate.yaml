@@ -25,13 +25,13 @@ spec:
             # Force a numeric result even with no samples; no-traffic resolves to 0.
             (
               (
-                sum(rate(http_requests_total{tenant="{{`{{args.tenant}}`}}",namespace="{{`{{args.namespace}}`}}",status=~"5.."}[2m]))
+                sum(rate(http_requests_total{tenant="{{`{{args.tenant}}`}}",status=~"5.."}[2m]))
                 or vector(0)
               )
               /
               clamp_min(
                 (
-                  sum(rate(http_requests_total{tenant="{{`{{args.tenant}}`}}",namespace="{{`{{args.namespace}}`}}"}[2m]))
+                  sum(rate(http_requests_total{tenant="{{`{{args.tenant}}`}}"}[2m]))
                   or vector(0)
                 ),
                 1
@@ -53,7 +53,7 @@ spec:
               histogram_quantile(
                 0.95,
                 sum by (le) (
-                  rate(http_request_duration_seconds_bucket{tenant="{{`{{args.tenant}}`}}",namespace="{{`{{args.namespace}}`}}"}[2m])
+                  rate(http_request_duration_seconds_bucket{tenant="{{`{{args.tenant}}`}}"}[2m])
                 )
               )
             ) or vector(0)
