@@ -28,7 +28,12 @@ kubectl -n argocd get applications.argoproj.io -o wide || true
 echo
 
 echo "Rollouts"
-kubectl get rollout -A || true
+if kubectl get crd rollouts.argoproj.io >/dev/null 2>&1; then
+  kubectl get rollout -A || true
+else
+  echo "Rollout CRD is missing; rollouts are not available yet."
+  echo "Hint: run 'make argo-rollouts' and then re-run this status check."
+fi
 
 if [[ -d "$TF_DIR" && -f "${TF_DIR}/terraform.tfstate" ]] && command -v terraform >/dev/null 2>&1; then
   echo
