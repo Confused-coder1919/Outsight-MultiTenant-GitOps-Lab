@@ -12,6 +12,7 @@ spec:
     - name: namespace
   metrics:
     - name: error-rate-5xx
+      # 2% threshold for server errors during canary.
       interval: {{ .Values.rollout.analysis.interval }}
       count: {{ .Values.rollout.analysis.count }}
       failureLimit: {{ .Values.rollout.analysis.failureLimit }}
@@ -21,10 +22,23 @@ spec:
         prometheus:
           address: {{ .Values.rollout.analysis.prometheusAddress | quote }}
           query: |
-            sum(rate(http_requests_total{tenant="{{`{{args.tenant}}`}}",namespace="{{`{{args.namespace}}`}}",status=~"5.."}[2m]))
-            /
-            clamp_min(sum(rate(http_requests_total{tenant="{{`{{args.tenant}}`}}",namespace="{{`{{args.namespace}}`}}"}[2m])), 1)
+            # Force a numeric result even with no samples; no-traffic resolves to 0.
+            (
+              (
+                sum(rate(http_requests_total{tenant="{{`{{args.tenant}}`}}",namespace="{{`{{args.namespace}}`}}",status=~"5.."}[2m]))
+                or vector(0)
+              )
+              /
+              clamp_min(
+                (
+                  sum(rate(http_requests_total{tenant="{{`{{args.tenant}}`}}",namespace="{{`{{args.namespace}}`}}"}[2m]))
+                  or vector(0)
+                ),
+                1
+              )
+            ) or vector(0)
     - name: latency-p95
+      # 500ms threshold for p95 request latency during canary.
       interval: {{ .Values.rollout.analysis.interval }}
       count: {{ .Values.rollout.analysis.count }}
       failureLimit: {{ .Values.rollout.analysis.failureLimit }}
@@ -34,10 +48,13 @@ spec:
         prometheus:
           address: {{ .Values.rollout.analysis.prometheusAddress | quote }}
           query: |
-            histogram_quantile(
-              0.95,
-              sum by (le) (
-                rate(http_request_duration_seconds_bucket{tenant="{{`{{args.tenant}}`}}",namespace="{{`{{args.namespace}}`}}"}[2m])
+            # Fallback to 0 when histogram buckets are absent so no-data does not crash analysis.
+            (
+              histogram_quantile(
+                0.95,
+                sum by (le) (
+                  rate(http_request_duration_seconds_bucket{tenant="{{`{{args.tenant}}`}}",namespace="{{`{{args.namespace}}`}}"}[2m])
+                )
               )
-            )
+            ) or vector(0)
 {{- end }}

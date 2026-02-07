@@ -63,10 +63,10 @@ rollout:
     interval: 30s
     count: 3
     failureLimit: 1
-    successCondition5xx: "len(result) > 0 && result[0] < 0.02"
-    successConditionP95: "len(result) > 0 && result[0] < 0.5"
-    failureCondition5xx: "len(result) == 0 || result[0] >= 0.02"
-    failureConditionP95: "len(result) == 0 || result[0] >= 0.5"
+    successCondition5xx: "result[0] < 0.02"
+    successConditionP95: "result[0] < 0.5"
+    failureCondition5xx: "result[0] >= 0.02"
+    failureConditionP95: "result[0] >= 0.5"
     # Prometheus service from kube-prometheus-stack in the observability namespace.
     prometheusAddress: http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090
 
