@@ -28,6 +28,22 @@ for cmd in kubectl helm awk mktemp curl; do
   require_cmd "$cmd"
 done
 
+ensure_rollouts_available() {
+  if kubectl get crd rollouts.argoproj.io >/dev/null 2>&1; then
+    return
+  fi
+  if [[ -x "${ROOT_DIR}/scripts/install_argo_rollouts.sh" ]]; then
+    echo "Rollout CRD missing; installing Argo Rollouts..."
+    "${ROOT_DIR}/scripts/install_argo_rollouts.sh"
+  fi
+  kubectl get crd rollouts.argoproj.io >/dev/null 2>&1 || {
+    echo "rollouts.argoproj.io CRD is still missing after install attempt." >&2
+    exit 1
+  }
+}
+
+ensure_rollouts_available
+
 if [[ ! -f "$VALUES_FILE" ]]; then
   echo "Values file not found: $VALUES_FILE" >&2
   exit 1
@@ -72,6 +88,11 @@ demoFailureEndpoint:
   enabled: true
 image:
   tag: "$TARGET_TAG"
+rollout:
+  analysis:
+    # Use a stricter demo threshold so short canary windows reliably fail on injected 5xx traffic.
+    successCondition5xx: "result[0] < 0.001"
+    failureCondition5xx: "result[0] >= 0.001"
 YAML
 
 loadgen_pid=""
@@ -204,7 +225,13 @@ while true; do
   sleep 5
 done
 
-for pid in "$error_pid" "$loadgen_pid" "$pf_pid"; do
+if [[ -n "$pf_pid" ]]; then
+  kill "$pf_pid" >/dev/null 2>&1 || true
+  wait "$pf_pid" >/dev/null 2>&1 || true
+fi
+pf_pid=""
+
+for pid in "$error_pid" "$loadgen_pid"; do
   if [[ -n "$pid" ]]; then
     wait "$pid" >/dev/null 2>&1 || true
   fi

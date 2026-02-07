@@ -26,6 +26,22 @@ for cmd in kubectl helm awk mktemp; do
   require_cmd "$cmd"
 done
 
+ensure_rollouts_available() {
+  if kubectl get crd rollouts.argoproj.io >/dev/null 2>&1; then
+    return
+  fi
+  if [[ -x "${ROOT_DIR}/scripts/install_argo_rollouts.sh" ]]; then
+    echo "Rollout CRD missing; installing Argo Rollouts..."
+    "${ROOT_DIR}/scripts/install_argo_rollouts.sh"
+  fi
+  kubectl get crd rollouts.argoproj.io >/dev/null 2>&1 || {
+    echo "rollouts.argoproj.io CRD is still missing after install attempt." >&2
+    exit 1
+  }
+}
+
+ensure_rollouts_available
+
 if [[ ! -f "$VALUES_FILE" ]]; then
   echo "Values file not found: $VALUES_FILE" >&2
   exit 1

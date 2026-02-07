@@ -23,7 +23,7 @@ kubectl get ns
 kubectl -n argocd get applications.argoproj.io -o wide
 
 # CRD readiness check first; without this, rollout resources cannot exist.
-if ! kubectl api-resources | grep -q "rollouts.argoproj.io"; then
+if ! kubectl api-resources | awk '{print $1}' | grep -qi "^rollouts$"; then
   echo "Rollout API not listed yet in api-resources output."
 fi
 if ! kubectl get crd rollouts.argoproj.io >/dev/null 2>&1; then
