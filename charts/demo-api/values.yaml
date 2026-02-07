@@ -19,6 +19,10 @@ appName: "demo-api"
 # Environment label to distinguish dev/stage/prod.
 environment: "dev"
 
+demoFailureEndpoint:
+  # Keep disabled in normal runs; scripts enable it temporarily for canary failure demos.
+  enabled: false
+
 resources:
   requests:
     cpu: 50m

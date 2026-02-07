@@ -2,7 +2,7 @@ import logging
 import os
 import time
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 APP_NAME = os.getenv("APP_NAME", "demo-api")
@@ -54,3 +54,12 @@ def health():
 def metrics():
     data = generate_latest()
     return Response(content=data, media_type=CONTENT_TYPE_LATEST)
+
+
+@app.get("/fail")
+def fail(code: int = Query(default=500, ge=400, le=599)):
+    # Keep failure injection disabled by default so normal environments are safe.
+    enabled = os.getenv("ENABLE_DEMO_FAILURE_ENDPOINT", "false").lower() == "true"
+    if not enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+    raise HTTPException(status_code=code, detail=f"demo failure endpoint ({code})")

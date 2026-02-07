@@ -53,6 +53,9 @@ spec:
             # App name is used to tag metrics for easier filtering.
             - name: APP_NAME
               value: "{{ .Values.appName }}"
+            # Failure endpoint is enabled only during scripted canary-failure demos.
+            - name: ENABLE_DEMO_FAILURE_ENDPOINT
+              value: {{ ternary "true" "false" .Values.demoFailureEndpoint.enabled | quote }}
           ports:
             - name: http
               containerPort: {{ .Values.service.targetPort }}
