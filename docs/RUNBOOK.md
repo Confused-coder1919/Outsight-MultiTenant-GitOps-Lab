@@ -9,6 +9,7 @@ and deploys both tenants via GitOps.
 - kubectl
 - helm
 - k3d
+- Optional: `kubectl-argo-rollouts` plugin for richer canary inspection
 
 ## Clone and enter repo
 
@@ -105,6 +106,27 @@ when `imagePullPolicy: IfNotPresent` is set.
 
 ```bash
 docker build -t ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-api:dev .
+```
+
+## Progressive delivery checks
+
+Successful canary:
+
+```bash
+SUCCESS_TAG=main make canary-success
+```
+
+Failure and rollback demo:
+
+```bash
+make canary-demo
+```
+
+Inspect rollout and analysis runs:
+
+```bash
+kubectl -n tenant-a get rollout demo-api -o wide
+kubectl -n tenant-a get analysisrun --sort-by=.metadata.creationTimestamp
 ```
 
 ## Notes

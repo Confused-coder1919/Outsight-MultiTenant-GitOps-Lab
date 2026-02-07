@@ -4,8 +4,8 @@
 
 This repo is an interview-ready, multi-tenant Kubernetes demo that shows a full DevOps loop:
 CI/CD builds and publishes a container, GitOps updates tenant values, Argo CD syncs the
-cluster, and Prometheus/Grafana/Loki provide observability. It is intentionally small but
-realistic and runnable locally on k3d or Docker Desktop.
+cluster, Argo Rollouts performs canary analysis, and Prometheus/Grafana/Loki provide
+observability. It is intentionally small but realistic and runnable locally on k3d or on a VPS.
 
 ## High-level flow
 
@@ -14,51 +14,58 @@ realistic and runnable locally on k3d or Docker Desktop.
    pushes immutable and moving tags to GHCR, then opens a PR updating tenant image tags in
    `charts/demo-api/tenants/*-values.yaml`.
 3) Argo CD watches the repo and syncs the Helm chart with tenant values from
-   `charts/demo-api/tenants/` (local-safe path).
-4) Prometheus scrapes each tenant via ServiceMonitor; Grafana dashboards visualize metrics;
+   `charts/demo-api/tenants/`.
+4) Argo Rollouts applies canary steps and runs Prometheus-backed AnalysisRuns.
+5) Prometheus scrapes each tenant via ServiceMonitor; Grafana dashboards visualize metrics;
    Loki/Promtail provide tenant-labeled logs.
-5) Argo Rollouts applies canary progression and runs automated Prometheus analysis for
-   rollback safety.
 
 ## Key components
 
 - App (FastAPI): `app/main.py`
-  - Endpoints: `/`, `/health`, `/metrics`.
+  - Endpoints: `/`, `/health`, `/metrics`, `/fail?code=...`.
+  - `/fail` is gated by `ENABLE_DEMO_FAILURE_ENDPOINT=true` for demo-only failure injection.
   - Uses `TENANT_NAME` env var for tenant-specific output and metric labels.
 - Tests: `tests/test_main.py`
-- Container: `Dockerfile` (listens on port 8000)
+- Container: `Dockerfile` (port 8000)
 
 ## Kubernetes + Helm
 
 - Helm chart: `charts/demo-api`
   - Templates: Rollout, AnalysisTemplate, Service, ServiceMonitor, PrometheusRule,
     NetworkPolicy, RBAC, PodDisruptionBudget.
-  - Values: `tenantName`, `image.repository`, `image.tag`, labels, resources, probes.
-- Tenants (Argo local):
+  - Values: `tenantName`, `image.repository`, `image.tag`, labels, resources, probes,
+    canary analysis thresholds.
+- Tenants (Argo source of truth):
   - `charts/demo-api/tenants/tenant-a-values.yaml`
   - `charts/demo-api/tenants/tenant-b-values.yaml`
-- Tenants (GitOps PRs):
+- Tenants (legacy GitOps PR path retained):
   - `gitops/tenants/tenant-a-values.yaml`
   - `gitops/tenants/tenant-b-values.yaml`
-  - Keep these in sync when demoing locally.
 
 ## GitOps (Argo CD)
 
 - Applications:
   - `gitops/argocd/tenant-a-app.yaml`
   - `gitops/argocd/tenant-b-app.yaml`
-- Each points to `charts/demo-api` and uses tenant values under `charts/demo-api/tenants/`.
-- Uses `CreateNamespace=true` to auto-create `tenant-a` and `tenant-b` namespaces.
+- Each points to `charts/demo-api` and uses in-chart tenant value files.
+- Sync options include `CreateNamespace=true` and `SkipDryRunOnMissingResource=true`.
+
+## Progressive delivery
+
+- Workload object is `kind: Rollout` (Argo Rollouts).
+- Canary steps: `10% -> pause 30s -> 50% -> pause 60s -> 100%`.
+- `AnalysisTemplate` evaluates:
+  - 5xx rate `< 2%`
+  - p95 latency `< 500ms`
+- Prometheus queries are no-data-safe (`or vector(0)`), preventing empty-result runtime issues.
 
 ## CI/CD
 
 - GitHub Actions: `.github/workflows/ci.yml`
   - PRs: lint + tests only.
-  - Push to `main`: build/push multi-arch image to GHCR with tags `sha-<shortsha>`,
-    `main`, and `dev`, then open a GitOps PR for tenant value bumps.
-  - GitOps promotion updates `charts/demo-api/tenants/*-values.yaml` only.
-- GitLab CI: `.gitlab-ci.yml`
-  - Mirrors lint/test/build/push stages for parity.
+  - Push to `main`: build/push multi-arch image (`sha-<shortsha>`, `main`, `dev`) and open a GitOps PR.
+  - Uses lowercase GHCR repo: `ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-api`.
+- GitLab CI: `.gitlab-ci.yml` (parity reference).
 
 ## Observability
 
@@ -69,9 +76,6 @@ realistic and runnable locally on k3d or Docker Desktop.
   - `observability/grafana/dashboards/tenant-overview.json`
 - Loki queries:
   - `observability/LOKI_QUERIES.md`
-- Loki datasource provisioning fix:
-  - Loki is not default (Prometheus remains default).
-  - Loki image pinned to `2.9.4` to satisfy Grafana health check.
 
 ## Scripts (idempotent)
 
@@ -81,67 +85,46 @@ realistic and runnable locally on k3d or Docker Desktop.
 - `scripts/deploy_gitops.sh`: apply Argo CD Applications.
 - `scripts/bootstrap_vps.sh`: Terraform-based VPS bootstrap + health checks.
 - `scripts/run_local_k3d.sh`: end-to-end local demo runner.
-- `scripts/verify.sh`: cluster and app verification (port-forward checks).
-- `scripts/canary_demo.sh`: deploy a broken tag, show canary degrade/abort, revert (works
-  even when `yq` is not installed).
+- `scripts/verify.sh`: cluster + app verification including rollout checks.
+- `scripts/loadgen.sh`: deterministic healthy/error traffic generation.
+- `scripts/canary_demo.sh`: failing canary demo with auto-revert.
+- `scripts/canary_success.sh`: healthy canary demo path.
+- `scripts/vps_status.sh`: nodes/apps/rollouts + terraform URLs summary.
 
-## Infra bootstrap (Terraform)
+## Terraform bootstrap
 
-- `infra/terraform/` bootstraps a single VPS into k3s and installs ingress-nginx,
-  Argo CD, Argo Rollouts, kube-prometheus-stack, and loki-stack.
-- Terraform also bootstraps Argo CD GitOps by applying the tenant Applications from
-  `gitops/argocd/` as-is (or generating minimal ones if missing) using the provided
-  `GITOPS_REPO` and `GITOPS_REVISION`.
-- Security note: Terraform uses `/etc/rancher/k3s/k3s.yaml` on the VPS for cluster ops and
-  securely copies it locally into `infra/terraform/kubeconfig.yaml`.
-- k3s installs with Traefik disabled (`--disable traefik`) since ingress-nginx is used.
+- `infra/terraform/` bootstraps VPS k3s + ingress-nginx + Argo CD + Argo Rollouts + observability stack.
+- Can bootstrap Argo Applications from `gitops/argocd/`.
+- k3s installs with Traefik disabled (`--disable traefik`).
 
 ## Docs
 
-- `docs/ARCHITECTURE.md`: architecture, flow, and tradeoffs.
-- `docs/RUNBOOK.md`: exact commands to run locally.
-- `docs/REPORT.md`: internship-aligned report.
-- `docs/INTERVIEW_TALK_TRACK.md`: pitch and Q&A.
-- `docs/DEMO_SCRIPT.md`: live demo steps and troubleshooting.
-- `docs/QUICKSTART.md`: reproducible VPS + local workflows.
+- `docs/ARCHITECTURE.md`
+- `docs/RUNBOOK.md`
+- `docs/QUICKSTART.md`
+- `docs/DEMO_SCRIPT.md`
+- `docs/INTERVIEW_TALK_TRACK.md`
+- `docs/REPORT.md`
 
-## Placeholders to update
-
-- GHCR repo path (if you fork):
-  - `charts/demo-api/tenants/tenant-a-values.yaml`
-  - `charts/demo-api/tenants/tenant-b-values.yaml`
-  - `gitops/tenants/tenant-a-values.yaml`
-  - `gitops/tenants/tenant-b-values.yaml`
-  - `.github/workflows/ci.yml` `IMAGE_REPO`
-- Argo CD repo URL (if you fork):
-  - `gitops/argocd/tenant-a-app.yaml`
-  - `gitops/argocd/tenant-b-app.yaml`
-
-## Quick local run
+## Quick commands
 
 ```bash
-make k3d
-make observability
-make argocd
-make gitops
-```
-
-Verify:
-```bash
-kubectl get pods -n tenant-a
-kubectl get pods -n tenant-b
+make local-up
+make local-verify
+make demo-traffic
+make canary-success SUCCESS_TAG=main
+make canary-demo
 ```
 
 ## Expected tenant behavior
 
 - `tenant-a` returns `{ "tenant": "tenant-a" }` at `/`.
 - `tenant-b` returns `{ "tenant": "tenant-b" }` at `/`.
-- `/metrics` exposes Prometheus metrics with tenant labels.
+- `/metrics` exposes tenant-labeled Prometheus metrics.
 
 ## Notes for reviewers
 
 - Namespace isolation is the multi-tenant model for this demo.
-- Progressive delivery is tenant-scoped via Argo Rollouts + Prometheus analysis.
-- Canary analysis expressions handle empty Prometheus results safely (fail/abort instead of parser errors).
+- Canary gates are tenant-scoped and driven by Prometheus analysis.
 - Centralized observability trades simplicity for shared blast radius.
-- GitOps PR flow is used to keep changes auditable.
+- GitOps PR flow keeps changes auditable.

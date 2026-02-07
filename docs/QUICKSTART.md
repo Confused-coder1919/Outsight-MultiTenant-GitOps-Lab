@@ -10,6 +10,7 @@ This guide provides two reproducible paths:
 ### Requirements
 
 - Terraform >= 1.5
+- kubectl + helm
 - SSH access to the VPS (user must have sudo)
 - Open firewall ports:
   - `22` (SSH)
@@ -32,11 +33,14 @@ export TF_VAR_GITOPS_REVISION="main"
 ```bash
 make vps-up
 make vps-verify
+make vps-status
 ```
 
 ### Notes
 
 - Argo CD and Grafana are exposed via NodePorts for simplicity.
+- For kubectl commands on VPS clusters, use:
+  `export KUBECONFIG=$(pwd)/infra/terraform/kubeconfig.yaml`
 - If NodePorts are blocked, use port-forwarding:
   - `kubectl -n argocd port-forward svc/argocd-server 8080:443`
   - `kubectl -n observability port-forward svc/kube-prometheus-stack-grafana 3000:80`
@@ -47,6 +51,7 @@ make vps-verify
 
 - Docker + k3d installed
 - Helm + kubectl installed
+- Optional: `kubectl-argo-rollouts` plugin for detailed rollout watch commands
 
 ### Run
 
@@ -68,3 +73,11 @@ Then:
 curl http://127.0.0.1:18080/health
 curl http://127.0.0.1:18080/metrics | head -n 5
 ```
+
+## Image registry note (GHCR)
+
+- CI publishes multi-arch images (`amd64` + `arm64`) to GHCR with:
+  - immutable tag: `sha-<shortsha>`
+  - moving tags: `main`, `dev`
+- If GHCR package visibility is private, cluster pulls will fail without registry credentials.
+- For local-only demos, avoid registry dependency by building the image locally with the same repo/tag expected by Helm.

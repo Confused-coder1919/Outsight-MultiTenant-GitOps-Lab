@@ -1,38 +1,27 @@
-# Demo Script: CI -> GHCR -> GitOps -> Argo CD -> Observability
+# Demo Script: CI -> GHCR -> GitOps -> Argo CD -> Rollouts -> Observability
 
-## 2-minute talk track
+## 2-minute pitch
 
 1. Open a PR and show GitHub Actions running lint + tests only.
-2. Merge to `main`; CI builds a multi-arch image (`linux/amd64,linux/arm64`) and pushes to GHCR.
-3. The same workflow opens a GitOps PR that bumps tenant image tags to `sha-<shortsha>`.
-4. Merge the GitOps PR; Argo CD syncs tenant apps and rolls out new pods in `tenant-a` and `tenant-b`.
-5. Validate app health and show observability in Grafana + Loki filtered by tenant labels.
+2. Merge to `main`; CI builds and pushes a multi-arch image (`linux/amd64,linux/arm64`) to GHCR.
+3. CI opens a GitOps PR that bumps tenant image tags to immutable `sha-<shortsha>`.
+4. Merge that GitOps PR; Argo CD syncs tenant apps and Argo Rollouts performs canary progression.
+5. Show tenant-aware metrics/logs in Grafana and Loki, then run canary success/failure demos.
 
-## Pre-demo setup
+## CI and promotion flow (talk track)
 
-- Repo has Argo Applications in `gitops/argocd/`.
-- Tenant Helm values are in `charts/demo-api/tenants/`.
-- CI workflow uses:
-  - immutable tag `sha-<shortsha>`
-  - moving tags `main` and `dev`
-  - GHCR repo `ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-api`
+1. Create a small PR and point out PR-only checks (fast lint/test).
+2. Merge to `main` and open Actions logs for buildx multi-arch push.
+3. Show generated GitOps PR: `chore(gitops): bump demo-api to sha-<shortsha>`.
+4. Merge GitOps PR and verify Argo apps are `Synced` and `Healthy`.
 
-## CI and GitOps promotion flow
-
-1. Create any small app/doc change PR.
-2. Show CI checks: lint + tests only on `pull_request`.
-3. Merge to `main`.
-4. Open Actions run and confirm:
-   - multi-arch image push completed
-   - GitOps PR `chore(gitops): bump demo-api to sha-<shortsha>` created
-5. Merge the GitOps PR.
-
-## VPS verification commands
+## Baseline verification commands
 
 ```bash
 kubectl -n argocd get applications -o wide
 kubectl -n tenant-a get pods
 kubectl -n tenant-b get pods
+kubectl get rollout -A
 ```
 
 ```bash
@@ -41,31 +30,67 @@ curl http://127.0.0.1:18080/health
 curl http://127.0.0.1:18080/metrics | head
 ```
 
-Optional tenant-b app check:
+## Progressive Delivery Demo
+
+Install CLI plugin once (optional):
 
 ```bash
-kubectl -n tenant-b port-forward svc/demo-api 18081:8000
-curl http://127.0.0.1:18081/health
-curl http://127.0.0.1:18081/metrics | head
+brew install argoproj/tap/kubectl-argo-rollouts
 ```
 
-## Argo CD / Grafana URLs and credentials via Terraform outputs
+### Happy path canary
+
+Use a known-good tag that differs from current tenant value:
 
 ```bash
-cd infra/terraform
-terraform output -raw argocd_url
-terraform output -raw grafana_url
-terraform output -raw argocd_initial_admin_password_command
-terraform output -raw grafana_admin_password_command
+SUCCESS_TAG=main make canary-success
 ```
 
-Run returned password commands only when needed.
+While it runs:
 
-## Observability demo (Grafana + Loki)
+```bash
+kubectl -n tenant-a get rollout demo-api -w
+kubectl -n tenant-a get analysisrun -w
+```
 
-1. Open Grafana from `terraform output -raw grafana_url`.
-2. Open tenant dashboard (`observability/grafana/dashboards/tenant-overview.json`) and show request activity by tenant.
-3. In Grafana Explore with Loki datasource, run:
+Expected:
+
+- Rollout steps progress: `10% -> pause -> 50% -> pause -> 100%`.
+- Latest `AnalysisRun` ends `Successful`.
+- Rollout `phase` returns to `Healthy`.
+
+### Failure path canary (auto-abort)
+
+```bash
+make canary-demo
+```
+
+What this does:
+
+- Temporarily enables `/fail` endpoint only for tenant-a.
+- Generates error traffic during analysis windows.
+- Waits for degraded/failed analysis signal.
+- Reverts tenant-a back to chart values at script exit.
+
+Inspect after/while running:
+
+```bash
+kubectl -n tenant-a get rollout demo-api -o wide
+kubectl -n tenant-a get analysisrun --sort-by=.metadata.creationTimestamp
+kubectl -n tenant-a describe rollout demo-api
+```
+
+## What to show in Argo CD UI
+
+- `demo-api-tenant-a` app sync status and health.
+- Resource tree with `Rollout` instead of `Deployment`.
+- Events around pause, analysis, and abort (for failure demo).
+
+## What to show in Grafana
+
+1. Tenant dashboard request-rate panels (`tenant-a` vs `tenant-b`).
+2. Error-rate changes during failure demo window.
+3. Loki Explore query filtered by tenant:
 
 ```logql
 {tenant="tenant-a"}
@@ -75,100 +100,55 @@ Run returned password commands only when needed.
 {tenant="tenant-b"}
 ```
 
+## URLs and credential commands from Terraform outputs
+
+```bash
+cd infra/terraform
+terraform output -raw argocd_url
+terraform output -raw grafana_url
+terraform output -raw argocd_initial_admin_password_command
+terraform output -raw grafana_admin_password_command
+```
+
+Run the returned password commands only when needed.
+
 ## Failure modes and quick diagnosis
 
-### 1) ImagePullBackOff (tag missing / arch mismatch / auth)
+### ImagePullBackOff
 
-- Check pod events:
-  `kubectl -n tenant-a describe pod <pod-name>`
-- Confirm tag exists in GHCR and is multi-arch:
-  image should be `sha-<shortsha>` from merged GitOps PR.
-- If registry is private, verify pull auth policy/secret.
-
-### 2) Readiness probe failing
-
-- Check pod logs and probe status:
-  - `kubectl -n tenant-a logs <pod-name>`
-  - `kubectl -n tenant-a describe pod <pod-name>`
-- Confirm app listens on `8000` and `/health` returns 200.
-
-### 3) Argo Degraded reasons
-
-- Inspect Argo app details:
-  `kubectl -n argocd describe application demo-api-tenant-a`
-- Common causes:
-  - invalid Helm values
-  - image not pullable
-  - failed rollout due to probes/resources
-
-## Local fallback (no GHCR auth required)
-
-For local-only runs, keep using current local workflow:
+Causes: tag not found, private GHCR package, wrong architecture.
 
 ```bash
-make local-up
-make local-verify
+kubectl -n tenant-a describe pod <pod-name>
 ```
 
-This path does not require GitHub secrets locally.
+Checks:
 
-## Progressive Delivery Demo
+- image tag exists in GHCR (`sha-<shortsha>` from merged GitOps PR)
+- image manifest includes `amd64` and `arm64`
+- package visibility/auth is correct
 
-### What to show
-
-1. Deployment object is now `Rollout` with canary steps `10% -> pause 30s -> 50% -> pause 60s -> 100%`.
-2. Prometheus-driven `AnalysisTemplate` runs during canary and auto-aborts on bad metrics.
-3. Failed canary rolls back automatically to stable ReplicaSet.
-
-### Commands
-
-Install the CLI plugin (one-time, optional but recommended):
+### Readiness probe failing
 
 ```bash
-brew install argoproj/tap/kubectl-argo-rollouts
+kubectl -n tenant-a describe pod <pod-name>
+kubectl -n tenant-a logs <pod-name>
 ```
 
-Check rollout and analysis resources:
+Checks:
+
+- app listens on port `8000`
+- `/health` returns 200
+
+### Argo app degraded
 
 ```bash
-kubectl -n tenant-a get rollout demo-api
-kubectl -n tenant-a get analysistemplate demo-api-analysis
-kubectl -n tenant-a get rollout demo-api -o yaml | rg "setWeight|pause|analysis"
-```
-
-Watch rollout progress:
-
-```bash
-kubectl argo rollouts get rollout demo-api -n tenant-a --watch
-kubectl argo rollouts get rollout demo-api -n tenant-b --watch
-```
-
-Run the scripted failure-and-revert demo:
-
-```bash
-make canary-demo
-```
-
-Manual inspect during demo:
-
-```bash
-kubectl -n tenant-a get rollout demo-api -o wide
-kubectl -n tenant-a get analysisrun
-kubectl -n tenant-b get analysisrun
+kubectl -n argocd describe application demo-api-tenant-a
 kubectl -n tenant-a describe rollout demo-api
-kubectl -n tenant-a describe analysisrun $(kubectl -n tenant-a get analysisrun -o name | tail -n1)
 ```
 
-Prometheus verification queries used by analysis:
+Common reasons:
 
-```promql
-(
-  sum(rate(http_requests_total{tenant="tenant-a",namespace="tenant-a",status=~"5.."}[2m]))
-  /
-  clamp_min(sum(rate(http_requests_total{tenant="tenant-a",namespace="tenant-a"}[2m])), 1)
-)
-```
-
-```promql
-histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{tenant="tenant-a",namespace="tenant-a"}[2m])) by (le))
-```
+- invalid Helm values
+- failed canary analysis
+- image pull/probe failures

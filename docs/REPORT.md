@@ -47,6 +47,15 @@
 - Metrics are available per tenant in Prometheus and Grafana.
 - Logs are queryable in Loki by namespace and tenant labels.
 
+## Progressive Delivery Evidence
+
+- `kind: Rollout` replaces Deployment with canary steps `10 -> 50 -> 100` and pause gates.
+- Automated Prometheus analysis checks both 5xx rate and p95 latency before promotion.
+- No-data-safe PromQL (`or vector(0)`) avoids false crashes during low/no traffic windows.
+- Demo scripts prove both outcomes:
+  - `make canary-success SUCCESS_TAG=main` for successful gated rollout.
+  - `make canary-demo` for forced analysis failure and automatic rollback behavior.
+
 ## Lessons Learned
 
 - Namespace isolation is an effective baseline for SaaS multi-tenancy demos.
