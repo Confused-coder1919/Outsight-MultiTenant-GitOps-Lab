@@ -46,7 +46,8 @@ podDisruptionBudget:
 rollout:
   enabled: true
   revisionHistoryLimit: 3
-  progressDeadlineSeconds: 120
+  # Canary pauses (30s + 60s) and analysis windows can exceed 120s in real clusters.
+  progressDeadlineSeconds: 420
   progressDeadlineAbort: true
   maxSurge: "25%"
   maxUnavailable: 0
