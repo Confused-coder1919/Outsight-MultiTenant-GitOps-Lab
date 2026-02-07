@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TENANT="${TENANT:-tenant-a}"
+HELM_RELEASE="${HELM_RELEASE:-demo-api-${TENANT}}"
 VALUES_FILE="${ROOT_DIR}/charts/demo-api/tenants/${TENANT}-values.yaml"
 ROLLOUT_NAME="${ROLLOUT_NAME:-demo-api}"
 CANARY_TAG="${CANARY_TAG:-}"
@@ -88,7 +89,7 @@ cleanup() {
 
   if [[ "$revert_needed" == true ]]; then
     echo "Reverting ${TENANT} rollout to chart values..."
-    helm template demo-api "${ROOT_DIR}/charts/demo-api" -n "$TENANT" -f "$VALUES_FILE" \
+    helm template "$HELM_RELEASE" "${ROOT_DIR}/charts/demo-api" -n "$TENANT" -f "$VALUES_FILE" \
       | kubectl -n "$TENANT" apply -f - >/dev/null
   fi
 
@@ -105,7 +106,7 @@ wait_for_canary_pod() {
     current_hash="$(kubectl -n "$TENANT" get rollout "$ROLLOUT_NAME" -o jsonpath='{.status.currentPodHash}' 2>/dev/null || true)"
     stable_hash="$(kubectl -n "$TENANT" get rollout "$ROLLOUT_NAME" -o jsonpath='{.status.stableRS}' 2>/dev/null || true)"
 
-    if [[ -n "$current_hash" && "$current_hash" != "$stable_hash" ]]; then
+    if [[ -n "$current_hash" ]]; then
       canary_pod="$(kubectl -n "$TENANT" get pods -l "rollouts-pod-template-hash=${current_hash}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
       if [[ -n "$canary_pod" ]]; then
         canary_ready="$(kubectl -n "$TENANT" get pod "$canary_pod" -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || true)"
@@ -163,7 +164,7 @@ start_canary_error_traffic() {
 }
 
 echo "Applying canary-failure config for ${TENANT} (tag=${TARGET_TAG}, failure endpoint enabled)..."
-helm template demo-api "${ROOT_DIR}/charts/demo-api" -n "$TENANT" -f "$VALUES_FILE" -f "$OVERRIDE_FILE" \
+helm template "$HELM_RELEASE" "${ROOT_DIR}/charts/demo-api" -n "$TENANT" -f "$VALUES_FILE" -f "$OVERRIDE_FILE" \
   | kubectl -n "$TENANT" apply -f - >/dev/null
 
 echo "Generating healthy traffic during analysis window..."

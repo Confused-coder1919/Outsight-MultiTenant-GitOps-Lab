@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TENANT="${TENANT:-tenant-a}"
+HELM_RELEASE="${HELM_RELEASE:-demo-api-${TENANT}}"
 VALUES_FILE="${ROOT_DIR}/charts/demo-api/tenants/${TENANT}-values.yaml"
 ROLLOUT_NAME="${ROLLOUT_NAME:-demo-api}"
 SUCCESS_TAG="${SUCCESS_TAG:-main}"
@@ -82,7 +83,7 @@ cleanup() {
 
   if [[ "$revert_needed" == true ]]; then
     echo "Reverting ${TENANT} to chart values after interruption/failure..."
-    helm template demo-api "${ROOT_DIR}/charts/demo-api" -n "$TENANT" -f "$VALUES_FILE" \
+    helm template "$HELM_RELEASE" "${ROOT_DIR}/charts/demo-api" -n "$TENANT" -f "$VALUES_FILE" \
       | kubectl -n "$TENANT" apply -f - >/dev/null
   fi
 
@@ -91,7 +92,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "Applying candidate tag ${SUCCESS_TAG} to ${TENANT}..."
-helm template demo-api "${ROOT_DIR}/charts/demo-api" -n "$TENANT" -f "$VALUES_FILE" -f "$OVERRIDE_FILE" \
+helm template "$HELM_RELEASE" "${ROOT_DIR}/charts/demo-api" -n "$TENANT" -f "$VALUES_FILE" -f "$OVERRIDE_FILE" \
   | kubectl -n "$TENANT" apply -f - >/dev/null
 
 echo "Generating healthy traffic during canary analysis window..."
