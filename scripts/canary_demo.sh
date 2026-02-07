@@ -16,6 +16,9 @@ require_cmd() {
 }
 
 for cmd in kubectl helm yq; do
+  if [[ "$cmd" == "yq" ]]; then
+    continue
+  fi
   require_cmd "$cmd"
 done
 
@@ -29,7 +32,44 @@ if ! kubectl get ns "$TENANT" >/dev/null 2>&1; then
   exit 1
 fi
 
-PREV_TAG="$(yq e '.image.tag' "$VALUES_FILE")"
+get_image_tag() {
+  local file="$1"
+  if command -v yq >/dev/null 2>&1; then
+    yq e '.image.tag' "$file"
+    return
+  fi
+  grep -E '^[[:space:]]*tag:[[:space:]]*' "$file" | head -n1 | sed -E 's/^[[:space:]]*tag:[[:space:]]*"?([^" ]+)"?.*/\1/'
+}
+
+set_image_tag() {
+  local file="$1"
+  local tag="$2"
+  if command -v yq >/dev/null 2>&1; then
+    yq -i ".image.tag = \"${tag}\"" "$file"
+    return
+  fi
+  # Fallback when yq is unavailable: rewrite image.tag in a portable way.
+  local tmp
+  tmp="$(mktemp)"
+  awk -v new_tag="$tag" '
+    BEGIN { in_image = 0; replaced = 0 }
+    /^image:[[:space:]]*$/ { in_image = 1; print; next }
+    in_image && /^[^[:space:]]/ { in_image = 0 }
+    in_image && !replaced && /^[[:space:]]*tag:[[:space:]]*/ {
+      sub(/tag:[[:space:]]*.*/, "tag: \"" new_tag "\"")
+      replaced = 1
+    }
+    { print }
+    END {
+      if (!replaced) {
+        exit 2
+      }
+    }
+  ' "$file" >"$tmp"
+  mv "$tmp" "$file"
+}
+
+PREV_TAG="$(get_image_tag "$VALUES_FILE")"
 if [[ -z "$PREV_TAG" || "$PREV_TAG" == "null" ]]; then
   echo "Could not read previous image tag from $VALUES_FILE" >&2
   exit 1
@@ -37,14 +77,14 @@ fi
 
 rollback() {
   echo "Reverting ${TENANT} to previous tag ${PREV_TAG}..."
-  yq -i ".image.tag = \"${PREV_TAG}\"" "$VALUES_FILE"
+  set_image_tag "$VALUES_FILE" "$PREV_TAG"
   helm template demo-api "$ROOT_DIR/charts/demo-api" -n "$TENANT" -f "$VALUES_FILE" | kubectl -n "$TENANT" apply -f - >/dev/null
 }
 
 trap 'rollback' EXIT
 
 echo "Setting broken tag ${BROKEN_TAG} for ${TENANT}..."
-yq -i ".image.tag = \"${BROKEN_TAG}\"" "$VALUES_FILE"
+set_image_tag "$VALUES_FILE" "$BROKEN_TAG"
 helm template demo-api "$ROOT_DIR/charts/demo-api" -n "$TENANT" -f "$VALUES_FILE" | kubectl -n "$TENANT" apply -f - >/dev/null
 
 echo "Waiting for rollout to show paused/degraded state..."
