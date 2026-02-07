@@ -1,5 +1,5 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: {{ include "demo-api.fullname" . }}
   labels:
@@ -7,9 +7,35 @@ metadata:
     {{- include "demo-api.tenantLabels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.rollout.revisionHistoryLimit }}
+  progressDeadlineSeconds: {{ .Values.rollout.progressDeadlineSeconds }}
+  progressDeadlineAbort: {{ .Values.rollout.progressDeadlineAbort }}
   selector:
     matchLabels:
       {{- include "demo-api.selectorLabels" . | nindent 6 }}
+  strategy:
+    canary:
+      maxSurge: {{ .Values.rollout.maxSurge | quote }}
+      maxUnavailable: {{ .Values.rollout.maxUnavailable }}
+      abortScaleDownDelaySeconds: {{ .Values.rollout.abortScaleDownDelaySeconds }}
+      {{- if .Values.rollout.analysis.enabled }}
+      analysis:
+        templates:
+          - templateName: {{ include "demo-api.fullname" . }}-analysis
+        args:
+          - name: tenant
+            value: "{{ .Values.tenantName }}"
+          - name: namespace
+            value: "{{ .Release.Namespace }}"
+      {{- end }}
+      steps:
+        - setWeight: {{ index .Values.rollout.canary.stepWeights 0 }}
+        - pause:
+            duration: {{ index .Values.rollout.canary.pauseSeconds 0 }}s
+        - setWeight: {{ index .Values.rollout.canary.stepWeights 1 }}
+        - pause:
+            duration: {{ index .Values.rollout.canary.pauseSeconds 1 }}s
+        - setWeight: 100
   template:
     metadata:
       labels:

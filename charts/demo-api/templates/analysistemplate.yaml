@@ -1,0 +1,43 @@
+{{- if .Values.rollout.analysis.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ include "demo-api.fullname" . }}-analysis
+  labels:
+    {{- include "demo-api.labels" . | nindent 4 }}
+    {{- include "demo-api.tenantLabels" . | nindent 4 }}
+spec:
+  args:
+    - name: tenant
+    - name: namespace
+  metrics:
+    - name: error-rate-5xx
+      interval: {{ .Values.rollout.analysis.interval }}
+      count: {{ .Values.rollout.analysis.count }}
+      failureLimit: {{ .Values.rollout.analysis.failureLimit }}
+      successCondition: {{ .Values.rollout.analysis.successCondition5xx | quote }}
+      failureCondition: {{ .Values.rollout.analysis.failureCondition5xx | quote }}
+      provider:
+        prometheus:
+          address: {{ .Values.rollout.analysis.prometheusAddress | quote }}
+          query: |
+            sum(rate(http_requests_total{tenant="{{`{{args.tenant}}`}}",namespace="{{`{{args.namespace}}`}}",status=~"5.."}[2m]))
+            /
+            clamp_min(sum(rate(http_requests_total{tenant="{{`{{args.tenant}}`}}",namespace="{{`{{args.namespace}}`}}"}[2m])), 1)
+    - name: latency-p95
+      interval: {{ .Values.rollout.analysis.interval }}
+      count: {{ .Values.rollout.analysis.count }}
+      failureLimit: {{ .Values.rollout.analysis.failureLimit }}
+      successCondition: {{ .Values.rollout.analysis.successConditionP95 | quote }}
+      failureCondition: {{ .Values.rollout.analysis.failureConditionP95 | quote }}
+      provider:
+        prometheus:
+          address: {{ .Values.rollout.analysis.prometheusAddress | quote }}
+          query: |
+            histogram_quantile(
+              0.95,
+              sum by (le) (
+                rate(http_request_duration_seconds_bucket{tenant="{{`{{args.tenant}}`}}",namespace="{{`{{args.namespace}}`}}"}[2m])
+              )
+            )
+{{- end }}
