@@ -3,7 +3,7 @@ IMAGE_NAME ?= ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-api
 TAG ?= dev
 
 .PHONY: lint test run docker-build docker-run k3d argocd observability gitops \
-	vps-up vps-verify vps-down local-up local-verify help
+	vps-up vps-verify vps-down local-up local-verify canary-demo help
 
 lint:
 	ruff check .
@@ -52,6 +52,9 @@ local-verify:
 	if [ ! -f "$$K3D_KUBECONFIG" ]; then k3d kubeconfig write "$$CLUSTER_NAME" >/dev/null; fi; \
 	KUBECONFIG="$$K3D_KUBECONFIG" ./scripts/verify.sh
 
+canary-demo:
+	./scripts/canary_demo.sh
+
 help:
 	@echo "Usage:"; \
 	echo "  make k3d              Create local k3d cluster"; \
@@ -62,4 +65,5 @@ help:
 	echo "  make vps-verify       Verify VPS deployment"; \
 	echo "  make vps-down         Destroy VPS stack (prompted)"; \
 	echo "  make local-up         Run full demo locally"; \
-	echo "  make local-verify     Verify local deployment"
+	echo "  make local-verify     Verify local deployment"; \
+	echo "  make canary-demo      Trigger canary failure and rollback demo"

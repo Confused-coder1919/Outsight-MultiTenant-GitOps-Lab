@@ -33,6 +33,16 @@ Kubernetes (k3d)
 - Argo CD watches the repo and syncs the updated Helm values into each tenant namespace.
 - Local note: Argo CD reads tenant values from `charts/demo-api/tenants/` to avoid path traversal.
 
+## Progressive delivery flow (Argo Rollouts)
+
+- The workload uses `kind: Rollout` (not Deployment) with canary steps:
+  `10% -> pause 30s -> 50% -> pause 60s -> 100%`.
+- Each canary promotion runs an `AnalysisTemplate` against Prometheus metrics:
+  - 5xx rate must stay below 2%.
+  - p95 latency must stay below 500ms.
+- If analysis fails, Rollouts aborts promotion and keeps/reverts to stable pods.
+- This gives controlled exposure with automated safety checks for each tenant namespace.
+
 ## Why GitOps
 
 - Git is the single source of truth for tenant config and image versions.
@@ -56,6 +66,18 @@ Kubernetes (k3d)
 - Promtail carries tenant/app/environment labels into logs for targeted Loki queries.
 - Optional cloud-native integration: in production, the same metrics/logs could be
   forwarded to CloudWatch or a managed SaaS; here it is documented only.
+
+## Progressive delivery (Argo Rollouts)
+
+- The app workload uses `kind: Rollout` with canary steps:
+  `10% -> pause 30s -> 50% -> pause 60s -> 100%`.
+- Each tenant namespace has an `AnalysisTemplate` that queries Prometheus during the canary.
+- Analysis gates promotion on:
+  - 5xx rate below 2%
+  - p95 latency below 500ms
+- If analysis fails, Rollouts aborts and keeps stable pods serving traffic (automatic rollback behavior).
+- This keeps the GitOps model unchanged: Argo CD syncs Helm values, and Rollouts performs
+  progressive delivery safely inside each tenant namespace.
 
 ## Centralized vs tenant-isolated observability
 

@@ -17,6 +17,8 @@ realistic and runnable locally on k3d or Docker Desktop.
    `charts/demo-api/tenants/` (local-safe path).
 4) Prometheus scrapes each tenant via ServiceMonitor; Grafana dashboards visualize metrics;
    Loki/Promtail provide tenant-labeled logs.
+5) Argo Rollouts applies canary progression and runs automated Prometheus analysis for
+   rollback safety.
 
 ## Key components
 
@@ -29,8 +31,8 @@ realistic and runnable locally on k3d or Docker Desktop.
 ## Kubernetes + Helm
 
 - Helm chart: `charts/demo-api`
-  - Templates: Deployment, Service, ServiceMonitor, PrometheusRule, NetworkPolicy, RBAC,
-    PodDisruptionBudget.
+  - Templates: Rollout, AnalysisTemplate, Service, ServiceMonitor, PrometheusRule,
+    NetworkPolicy, RBAC, PodDisruptionBudget.
   - Values: `tenantName`, `image.repository`, `image.tag`, labels, resources, probes.
 - Tenants (Argo local):
   - `charts/demo-api/tenants/tenant-a-values.yaml`
@@ -74,17 +76,18 @@ realistic and runnable locally on k3d or Docker Desktop.
 ## Scripts (idempotent)
 
 - `scripts/bootstrap_k3d.sh`: create local k3d cluster.
-- `scripts/install_argocd.sh`: install Argo CD.
+- `scripts/install_argocd.sh`: install Argo CD and Argo Rollouts.
 - `scripts/install_observability.sh`: install Prometheus/Grafana/Loki.
 - `scripts/deploy_gitops.sh`: apply Argo CD Applications.
 - `scripts/bootstrap_vps.sh`: Terraform-based VPS bootstrap + health checks.
 - `scripts/run_local_k3d.sh`: end-to-end local demo runner.
 - `scripts/verify.sh`: cluster and app verification (port-forward checks).
+- `scripts/canary_demo.sh`: deploy a broken tag, show canary degrade/abort, revert.
 
 ## Infra bootstrap (Terraform)
 
 - `infra/terraform/` bootstraps a single VPS into k3s and installs ingress-nginx,
-  Argo CD, kube-prometheus-stack, and loki-stack.
+  Argo CD, Argo Rollouts, kube-prometheus-stack, and loki-stack.
 - Terraform also bootstraps Argo CD GitOps by applying the tenant Applications from
   `gitops/argocd/` as-is (or generating minimal ones if missing) using the provided
   `GITOPS_REPO` and `GITOPS_REVISION`.
@@ -137,5 +140,6 @@ kubectl get pods -n tenant-b
 ## Notes for reviewers
 
 - Namespace isolation is the multi-tenant model for this demo.
+- Progressive delivery is tenant-scoped via Argo Rollouts + Prometheus analysis.
 - Centralized observability trades simplicity for shared blast radius.
 - GitOps PR flow is used to keep changes auditable.

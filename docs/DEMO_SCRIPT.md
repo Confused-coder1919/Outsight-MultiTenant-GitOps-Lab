@@ -111,3 +111,64 @@ make local-verify
 ```
 
 This path does not require GitHub secrets locally.
+
+## Progressive Delivery Demo
+
+### What to show
+
+1. Deployment object is now `Rollout` with canary steps `10% -> pause 30s -> 50% -> pause 60s -> 100%`.
+2. Prometheus-driven `AnalysisTemplate` runs during canary and auto-aborts on bad metrics.
+3. Failed canary rolls back automatically to stable ReplicaSet.
+
+### Commands
+
+Install the CLI plugin (one-time, optional but recommended):
+
+```bash
+brew install argoproj/tap/kubectl-argo-rollouts
+```
+
+Check rollout and analysis resources:
+
+```bash
+kubectl -n tenant-a get rollout demo-api
+kubectl -n tenant-a get analysistemplate demo-api-analysis
+kubectl -n tenant-a get rollout demo-api -o yaml | rg "setWeight|pause|analysis"
+```
+
+Watch rollout progress:
+
+```bash
+kubectl argo rollouts get rollout demo-api -n tenant-a --watch
+kubectl argo rollouts get rollout demo-api -n tenant-b --watch
+```
+
+Run the scripted failure-and-revert demo:
+
+```bash
+make canary-demo
+```
+
+Manual inspect during demo:
+
+```bash
+kubectl -n tenant-a get rollout demo-api -o wide
+kubectl -n tenant-a get analysisrun
+kubectl -n tenant-b get analysisrun
+kubectl -n tenant-a describe rollout demo-api
+kubectl -n tenant-a describe analysisrun $(kubectl -n tenant-a get analysisrun -o name | tail -n1)
+```
+
+Prometheus verification queries used by analysis:
+
+```promql
+(
+  sum(rate(http_requests_total{tenant="tenant-a",namespace="tenant-a",status=~"5.."}[2m]))
+  /
+  clamp_min(sum(rate(http_requests_total{tenant="tenant-a",namespace="tenant-a"}[2m])), 1)
+)
+```
+
+```promql
+histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{tenant="tenant-a",namespace="tenant-a"}[2m])) by (le))
+```
