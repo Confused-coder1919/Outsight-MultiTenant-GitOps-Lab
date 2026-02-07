@@ -82,7 +82,8 @@ realistic and runnable locally on k3d or Docker Desktop.
 - `scripts/bootstrap_vps.sh`: Terraform-based VPS bootstrap + health checks.
 - `scripts/run_local_k3d.sh`: end-to-end local demo runner.
 - `scripts/verify.sh`: cluster and app verification (port-forward checks).
-- `scripts/canary_demo.sh`: deploy a broken tag, show canary degrade/abort, revert.
+- `scripts/canary_demo.sh`: deploy a broken tag, show canary degrade/abort, revert (works
+  even when `yq` is not installed).
 
 ## Infra bootstrap (Terraform)
 
@@ -141,5 +142,6 @@ kubectl get pods -n tenant-b
 
 - Namespace isolation is the multi-tenant model for this demo.
 - Progressive delivery is tenant-scoped via Argo Rollouts + Prometheus analysis.
+- Canary analysis expressions handle empty Prometheus results safely (fail/abort instead of parser errors).
 - Centralized observability trades simplicity for shared blast radius.
 - GitOps PR flow is used to keep changes auditable.
