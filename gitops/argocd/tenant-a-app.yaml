@@ -26,3 +26,5 @@ spec:
     syncOptions:
       # Argo CD will create the tenant namespace if it doesn't exist.
       - CreateNamespace=true
+      # Lets Argo continue while custom-resource controllers are installing.
+      - SkipDryRunOnMissingResource=true

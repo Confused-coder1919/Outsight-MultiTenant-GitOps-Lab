@@ -9,6 +9,7 @@ common platform addons. It is intentionally small and idempotent for demo purpos
 - Helm
 - ingress-nginx
 - Argo CD (NodePort)
+- Argo Rollouts controller/CRDs
 - kube-prometheus-stack (Grafana via NodePort)
 - loki-stack (Loki + Promtail)
 

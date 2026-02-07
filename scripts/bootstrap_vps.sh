@@ -45,7 +45,7 @@ fi
 export KUBECONFIG="${TERRAFORM_DIR}/kubeconfig.yaml"
 
 echo "Waiting for namespaces to be created..."
-for ns in argocd observability ingress-nginx; do
+for ns in argocd observability ingress-nginx argo-rollouts; do
   for i in {1..60}; do
     if kubectl get namespace "$ns" >/dev/null 2>&1; then
       echo "Namespace $ns is present."
@@ -61,7 +61,7 @@ for ns in argocd observability ingress-nginx; do
 done
 
 echo "Waiting for core workloads to be ready..."
-for ns in ingress-nginx argocd observability; do
+for ns in ingress-nginx argocd observability argo-rollouts; do
   if kubectl -n "$ns" get deployment >/dev/null 2>&1; then
     kubectl -n "$ns" wait --for=condition=Available deployment --all --timeout=10m
   fi
