@@ -65,6 +65,7 @@ observability. It is intentionally small but realistic and runnable locally on k
   - PRs: lint + tests only.
   - Push to `main`: build/push multi-arch image (`sha-<shortsha>`, `main`, `dev`) and open a GitOps PR.
   - Uses lowercase GHCR repo: `ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-api`.
+  - If GitHub repo settings block action-created PRs, workflow logs a clear warning and prints manual fallback commands instead of failing the whole pipeline.
 - GitLab CI: `.gitlab-ci.yml` (parity reference).
 
 ## Observability
@@ -76,6 +77,11 @@ observability. It is intentionally small but realistic and runnable locally on k
   - `observability/grafana/dashboards/tenant-overview.json`
 - Loki queries:
   - `observability/LOKI_QUERIES.md`
+- External demo NodePorts:
+  - Argo CD `30443`
+  - Grafana `30000`
+  - Prometheus `30090`
+  - Loki `31000`
 
 ## Scripts (idempotent)
 
@@ -91,6 +97,7 @@ observability. It is intentionally small but realistic and runnable locally on k
 - `scripts/canary_demo.sh`: failing canary demo with auto-revert (no git commits, no yq dependency).
 - `scripts/canary_success.sh`: healthy canary demo path using override tag and healthy traffic.
 - `scripts/vps_status.sh`: nodes/apps/rollouts + terraform URLs summary.
+- `scripts/open_demo_ports.sh`: exposes NodePorts and prints all demo links + credential commands.
 
 ## Terraform bootstrap
 

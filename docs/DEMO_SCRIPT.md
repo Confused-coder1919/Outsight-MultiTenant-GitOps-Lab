@@ -24,6 +24,19 @@ kubectl -n tenant-b get pods
 kubectl get rollout -A
 ```
 
+Open all externally reachable demo endpoints first:
+
+```bash
+make open-ports
+```
+
+Links to show:
+
+- Argo CD: `https://<vps-ip>:30443`
+- Grafana: `http://<vps-ip>:30000`
+- Prometheus: `http://<vps-ip>:30090`
+- Loki readiness: `http://<vps-ip>:31000/ready`
+
 ```bash
 kubectl -n tenant-a port-forward svc/demo-api 18080:8000
 curl http://127.0.0.1:18080/health

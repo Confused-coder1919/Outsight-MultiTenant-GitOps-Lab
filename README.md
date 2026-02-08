@@ -133,6 +133,35 @@ kubectl get pods -n tenant-a
 kubectl get pods -n tenant-b
 ```
 
+## VPS demo URLs (open everything needed for UI/metrics)
+
+```bash
+make open-ports
+```
+
+This ensures NodePorts are exposed for demo access and prints links:
+
+- Argo CD: `https://<vps-ip>:30443`
+- Grafana: `http://<vps-ip>:30000`
+- Prometheus: `http://<vps-ip>:30090`
+- Loki readiness/API: `http://<vps-ip>:31000/ready`
+
+Credentials:
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+kubectl -n observability get secret kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' | base64 -d; echo
+```
+
+Tenant app endpoints remain internal by design (ClusterIP). Use port-forward:
+
+```bash
+kubectl -n tenant-a port-forward svc/demo-api 18080:8000
+kubectl -n tenant-b port-forward svc/demo-api 28080:8000
+curl http://127.0.0.1:18080/health
+curl http://127.0.0.1:18080/metrics | head
+```
+
 ## Local Docker (sanity check)
 
 ```bash

@@ -78,6 +78,19 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 
 Open https://localhost:8083 and login as `admin` with the decoded password.
 
+## Open all VPS demo ports (Argo + Grafana + Prometheus + Loki)
+
+```bash
+make open-ports
+```
+
+Expected direct URLs:
+
+- `https://<vps-ip>:30443` (Argo CD)
+- `http://<vps-ip>:30000` (Grafana)
+- `http://<vps-ip>:30090` (Prometheus)
+- `http://<vps-ip>:31000/ready` (Loki readiness/API)
+
 ## Access Grafana
 
 ```bash

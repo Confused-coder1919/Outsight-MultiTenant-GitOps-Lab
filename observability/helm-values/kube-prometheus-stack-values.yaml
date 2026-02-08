@@ -2,9 +2,15 @@ grafana:
   adminUser: admin
   adminPassword: admin
   service:
-    type: ClusterIP
+    # Expose Grafana on a stable demo URL from the VPS.
+    type: NodePort
+    nodePort: 30000
 
 prometheus:
+  service:
+    # Expose Prometheus UI directly for recruiter demos.
+    type: NodePort
+    nodePort: 30090
   prometheusSpec:
     serviceMonitorSelector:
       matchLabels:

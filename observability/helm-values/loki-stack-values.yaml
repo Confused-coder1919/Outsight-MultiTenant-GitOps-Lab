@@ -2,6 +2,10 @@ loki:
   enabled: true
   # Grafana must keep Prometheus as the only default datasource.
   isDefault: false
+  service:
+    # Expose Loki API for direct demo/testing from browser/curl.
+    type: NodePort
+    nodePort: 31000
   # Align with Grafana's Loki health check query support.
   image:
     tag: "2.9.4"

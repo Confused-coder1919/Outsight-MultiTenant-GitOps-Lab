@@ -91,8 +91,10 @@ jobs:
 
       - name: Install yq
         run: |
-          curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64 -o /usr/local/bin/yq
-          chmod +x /usr/local/bin/yq
+          # /usr/local/bin is root-owned on GitHub hosted runners.
+          sudo curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64 -o /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
 
       - name: Update tenant image values for Argo CD
         run: |
@@ -109,7 +111,9 @@ jobs:
           fi
 
       - name: Open GitOps promotion PR
+        id: gitops_pr
         if: steps.changes.outputs.changed == 'true'
+        continue-on-error: true
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ github.token }}
@@ -134,6 +138,18 @@ jobs:
           add-paths: |
             charts/demo-api/tenants/tenant-a-values.yaml
             charts/demo-api/tenants/tenant-b-values.yaml
+
+      - name: Report GitOps promotion fallback
+        if: steps.changes.outputs.changed == 'true' && steps.gitops_pr.outcome != 'success'
+        run: |
+          echo "::warning::Image build/push succeeded, but GitOps PR automation could not open a PR."
+          echo "::warning::Most common cause: repository setting 'Allow GitHub Actions to create and approve pull requests' is disabled."
+          echo "::warning::Manual fallback:"
+          echo "  git checkout -b gitops/bump-image-${SHORT_SHA}"
+          echo "  yq -i '.image.repository = strenv(IMAGE_REPO) | .image.tag = strenv(IMAGE_TAG)' charts/demo-api/tenants/tenant-a-values.yaml"
+          echo "  yq -i '.image.repository = strenv(IMAGE_REPO) | .image.tag = strenv(IMAGE_TAG)' charts/demo-api/tenants/tenant-b-values.yaml"
+          echo "  git commit -am 'chore(gitops): bump demo-api to ${IMAGE_TAG}'"
+          echo "  git push origin gitops/bump-image-${SHORT_SHA}"
 
       - name: No-op when image tag is already promoted
         if: steps.changes.outputs.changed != 'true'

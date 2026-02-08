@@ -45,8 +45,8 @@ resource "null_resource" "bootstrap" {
       "helm upgrade --install argo-rollouts argo/argo-rollouts --namespace argo-rollouts --create-namespace --wait --timeout 10m",
       "kubectl -n argo-rollouts rollout status deploy/argo-rollouts --timeout=180s",
       "kubectl get crd rollouts.argoproj.io >/dev/null",
-      "helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack --namespace observability --create-namespace --set grafana.service.type=NodePort --set grafana.service.nodePort=30000 --wait --timeout 10m",
-      "helm upgrade --install loki grafana/loki-stack --namespace observability --create-namespace --set grafana.enabled=false --set loki.isDefault=false --set promtail.enabled=true --wait --timeout 10m"
+      "helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack --namespace observability --create-namespace --set grafana.service.type=NodePort --set grafana.service.nodePort=30000 --set prometheus.service.type=NodePort --set prometheus.service.nodePort=30090 --wait --timeout 10m",
+      "helm upgrade --install loki grafana/loki-stack --namespace observability --create-namespace --set grafana.enabled=false --set loki.isDefault=false --set loki.service.type=NodePort --set loki.service.nodePort=31000 --set promtail.enabled=true --wait --timeout 10m"
     ]
   }
 
