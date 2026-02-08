@@ -36,6 +36,13 @@ make observability
 make argocd
 ```
 
+## Ensure Argo Rollouts CRDs/controller (idempotent)
+
+```bash
+make argo-rollouts
+kubectl get crd rollouts.argoproj.io
+```
+
 ## Deploy GitOps applications
 
 ```bash
@@ -113,13 +120,13 @@ docker build -t ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-ap
 Successful canary:
 
 ```bash
-SUCCESS_TAG=main make canary-success
+SUCCESS_TAG=main TRAFFIC_SECONDS=120 WAIT_SECONDS=420 make canary-success
 ```
 
 Failure and rollback demo:
 
 ```bash
-make canary-demo
+TRAFFIC_SECONDS=120 WAIT_SECONDS=420 make canary-demo
 ```
 
 Inspect rollout and analysis runs:

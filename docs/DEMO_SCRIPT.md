@@ -32,6 +32,13 @@ curl http://127.0.0.1:18080/metrics | head
 
 ## Progressive Delivery Demo
 
+Pre-check (idempotent):
+
+```bash
+make argo-rollouts
+kubectl get crd rollouts.argoproj.io
+```
+
 Install CLI plugin once (optional):
 
 ```bash
@@ -43,7 +50,7 @@ brew install argoproj/tap/kubectl-argo-rollouts
 Use a known-good tag that differs from current tenant value:
 
 ```bash
-SUCCESS_TAG=main make canary-success
+SUCCESS_TAG=main TRAFFIC_SECONDS=120 WAIT_SECONDS=420 make canary-success
 ```
 
 While it runs:
@@ -62,15 +69,15 @@ Expected:
 ### Failure path canary (auto-abort)
 
 ```bash
-make canary-demo
+TRAFFIC_SECONDS=120 WAIT_SECONDS=420 make canary-demo
 ```
 
 What this does:
 
-- Temporarily enables `/fail` endpoint only for tenant-a.
-- Generates error traffic during analysis windows.
+- Temporarily applies a canary overlay for tenant-a with a forced-fail analysis gate.
+- Generates healthy traffic while the analysis evaluates.
 - Waits for degraded/failed analysis signal.
-- Reverts tenant-a back to chart values at script exit.
+- Reverts tenant-a back to chart values automatically at script exit/interruption.
 
 Inspect after/while running:
 

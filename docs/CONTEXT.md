@@ -80,15 +80,16 @@ observability. It is intentionally small but realistic and runnable locally on k
 ## Scripts (idempotent)
 
 - `scripts/bootstrap_k3d.sh`: create local k3d cluster.
-- `scripts/install_argocd.sh`: install Argo CD and Argo Rollouts.
+- `scripts/install_argocd.sh`: install Argo CD, then call rollouts installer.
+- `scripts/install_argo_rollouts.sh`: install Argo Rollouts CRDs/controller via Helm.
 - `scripts/install_observability.sh`: install Prometheus/Grafana/Loki.
 - `scripts/deploy_gitops.sh`: apply Argo CD Applications.
 - `scripts/bootstrap_vps.sh`: Terraform-based VPS bootstrap + health checks.
 - `scripts/run_local_k3d.sh`: end-to-end local demo runner.
 - `scripts/verify.sh`: cluster + app verification including rollout checks.
 - `scripts/loadgen.sh`: deterministic healthy/error traffic generation.
-- `scripts/canary_demo.sh`: failing canary demo with auto-revert.
-- `scripts/canary_success.sh`: healthy canary demo path.
+- `scripts/canary_demo.sh`: failing canary demo with auto-revert (no git commits, no yq dependency).
+- `scripts/canary_success.sh`: healthy canary demo path using override tag and healthy traffic.
 - `scripts/vps_status.sh`: nodes/apps/rollouts + terraform URLs summary.
 
 ## Terraform bootstrap
@@ -112,8 +113,9 @@ observability. It is intentionally small but realistic and runnable locally on k
 make local-up
 make local-verify
 make demo-traffic
-make canary-success SUCCESS_TAG=main
-make canary-demo
+make argo-rollouts
+make canary-success SUCCESS_TAG=main TRAFFIC_SECONDS=120 WAIT_SECONDS=420
+make canary-demo TRAFFIC_SECONDS=120 WAIT_SECONDS=420
 ```
 
 ## Expected tenant behavior

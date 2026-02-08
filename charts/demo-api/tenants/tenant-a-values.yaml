@@ -1,10 +1,8 @@
-tenantName: tenant-a
+# Tenant-specific value used in responses and metrics labels.
+tenantName: "tenant-a"
+
 image:
+  # Keep in sync with .github/workflows/ci.yml IMAGE_REPO.
   repository: ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-api
-  tag: sha-5601734
-rollouts:
-  enabled: true
-analysis:
-  enabled: true
-  successCondition5xx: result[0] == 0
-  failureCondition5xx: result[0] > 0
+  # CI updates this tag via PR to drive GitOps deployments.
+  tag: "sha-5601734"

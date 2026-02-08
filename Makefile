@@ -4,7 +4,7 @@ TAG ?= dev
 
 .PHONY: lint test run docker-build docker-run k3d argocd observability gitops \
 	vps-up vps-verify vps-down local-up local-verify vps-status \
-	argo-rollouts canary-demo canary-success demo-traffic help
+	argo-rollouts rollouts-up canary-demo canary-success demo-traffic help
 
 lint:
 	ruff check .
@@ -33,10 +33,12 @@ observability:
 gitops:
 	./scripts/deploy_gitops.sh
 
-argo-rollouts:
+rollouts-up:
 	./scripts/install_argo_rollouts.sh
 
-rollouts: argo-rollouts
+argo-rollouts: rollouts-up
+
+rollouts: rollouts-up
 
 vps-up:
 	./scripts/bootstrap_vps.sh
@@ -58,10 +60,10 @@ local-verify:
 	if [ ! -f "$$K3D_KUBECONFIG" ]; then k3d kubeconfig write "$$CLUSTER_NAME" >/dev/null; fi; \
 	KUBECONFIG="$$K3D_KUBECONFIG" ./scripts/verify.sh
 
-canary-demo: argo-rollouts
+canary-demo: rollouts-up
 	./scripts/canary_demo.sh
 
-canary-success: argo-rollouts
+canary-success: rollouts-up
 	./scripts/canary_success.sh
 
 demo-traffic:
@@ -75,7 +77,7 @@ help:
 	echo "  make k3d              Create local k3d cluster"; \
 	echo "  make observability    Install Prometheus/Grafana/Loki"; \
 	echo "  make argocd           Install Argo CD"; \
-	echo "  make argo-rollouts    Install Argo Rollouts CRDs/controller"; \
+	echo "  make rollouts-up      Install Argo Rollouts CRDs/controller"; \
 	echo "  make gitops           Apply Argo Applications"; \
 	echo "  make vps-up           Bootstrap VPS via Terraform"; \
 	echo "  make vps-verify       Verify VPS deployment"; \

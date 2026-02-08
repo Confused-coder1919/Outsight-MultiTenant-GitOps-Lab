@@ -21,18 +21,20 @@ echo "Cluster status"
 kubectl get nodes
 
 echo
+echo "Key namespaces"
+kubectl get ns argocd tenant-a tenant-b observability argo-rollouts ingress-nginx 2>/dev/null || kubectl get ns
 
+echo
 echo "Argo CD applications"
 kubectl -n argocd get applications.argoproj.io -o wide || true
 
 echo
-
 echo "Rollouts"
 if kubectl get crd rollouts.argoproj.io >/dev/null 2>&1; then
-  kubectl get rollout -A || true
+  kubectl get rollouts.argoproj.io -A || true
 else
   echo "Rollout CRD is missing; rollouts are not available yet."
-  echo "Hint: run 'make argo-rollouts' and then re-run this status check."
+  echo "Hint: run 'make rollouts-up' then re-run this status check."
 fi
 
 if [[ -d "$TF_DIR" && -f "${TF_DIR}/terraform.tfstate" ]] && command -v terraform >/dev/null 2>&1; then
