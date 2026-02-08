@@ -1,37 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PREFERRED_KUBECONFIG="${ROOT_DIR}/infra/terraform/kubeconfig.yaml"
+# Installs Argo Rollouts controller + CRDs in an idempotent way.
+# Uses the official install manifest.
+NAMESPACE="${ARGO_ROLLOUTS_NAMESPACE:-argo-rollouts}"
 
-if [[ -z "${KUBECONFIG:-}" && -f "$PREFERRED_KUBECONFIG" ]]; then
-  export KUBECONFIG="$PREFERRED_KUBECONFIG"
-  echo "Using kubeconfig: $KUBECONFIG"
+if kubectl api-resources | awk "{print \$1}" | grep -qx "rollouts"; then
+  echo "[rollouts] API already present."
+else
+  echo "[rollouts] Installing Argo Rollouts..."
+  kubectl create namespace "$NAMESPACE" >/dev/null 2>&1 || true
+  kubectl apply -n "$NAMESPACE" -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
 fi
 
-require_cmd() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    echo "Missing required command: $1" >&2
-    exit 1
-  fi
-}
-
-for cmd in helm kubectl; do
-  require_cmd "$cmd"
-done
-
-echo "Installing/upgrading Argo Rollouts via Helm..."
-helm repo add argo https://argoproj.github.io/argo-helm || true
-helm repo update
-
-helm upgrade --install argo-rollouts argo/argo-rollouts \
-  --namespace argo-rollouts \
-  --create-namespace
-
-echo "Waiting for Argo Rollouts controller deployment..."
-kubectl -n argo-rollouts rollout status deploy/argo-rollouts --timeout=180s
-
-echo "Verifying Rollout CRD exists..."
-kubectl get crd rollouts.argoproj.io >/dev/null
-
-echo "Argo Rollouts installation complete."
+echo "[rollouts] Waiting for controller deployment..."
+kubectl -n "$NAMESPACE" rollout status deploy/argo-rollouts --timeout=180s
+echo "[rollouts] OK"

@@ -23,7 +23,7 @@ kubectl get ns
 kubectl -n argocd get applications.argoproj.io -o wide
 
 # CRD readiness check first; without this, rollout resources cannot exist.
-if ! kubectl api-resources | awk '{print $1}' | grep -qi "^rollouts$"; then
+if ! kubectl api-resources | awk '{print $1}' | grep -qi '^rollouts$'; then
   echo "Rollout API not listed yet in api-resources output."
 fi
 if ! kubectl get crd rollouts.argoproj.io >/dev/null 2>&1; then
@@ -71,7 +71,7 @@ port_forward_and_check() {
   local pf_pid=$!
   pids+=("$pf_pid")
 
-  for i in {1..10}; do
+  for _ in {1..10}; do
     if curl -fsS "http://127.0.0.1:${local_port}/health" >/dev/null 2>&1; then
       break
     fi

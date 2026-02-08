@@ -36,6 +36,8 @@ gitops:
 argo-rollouts:
 	./scripts/install_argo_rollouts.sh
 
+rollouts: argo-rollouts
+
 vps-up:
 	./scripts/bootstrap_vps.sh
 
