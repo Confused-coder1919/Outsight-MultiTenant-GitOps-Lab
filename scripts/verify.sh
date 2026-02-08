@@ -31,7 +31,8 @@ kubectl get nodes
 kubectl get ns
 kubectl -n argocd get applications.argoproj.io -o wide
 
-if kubectl api-resources | grep -qiE 'rollout|rollouts\.argoproj\.io'; then
+api_resources="$(kubectl api-resources 2>/dev/null || true)"
+if printf '%s\n' "$api_resources" | grep -iE 'rollout|rollouts\.argoproj\.io' >/dev/null; then
   pass "rollout API is listed in api-resources"
 else
   fail "rollout API not found in api-resources. Run 'make rollouts-up'."
