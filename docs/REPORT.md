@@ -1,82 +1,111 @@
 # Report
 
-## Goals
+## Project Goal
 
-- Deliver a multi-tenant SaaS-style Kubernetes demo using FastAPI.
-- Showcase CI/CD (GitHub Actions + GitLab CI) with image publishing to GHCR.
-- Implement GitOps deployments with Helm and Argo CD.
-- Provide observability with Prometheus, Grafana, and Loki.
-- Document architecture, steps, and outcomes.
+Build a realistic, interview-ready platform demo that proves end-to-end DevOps ownership for:
 
-## Architecture
+- CI/CD
+- Kubernetes deployment management
+- GitOps operations
+- observability
+- progressive delivery safety
 
-- FastAPI service packaged as a Docker image.
-- Helm chart deploys the app to namespaces `tenant-a` and `tenant-b`.
-- Argo CD Applications pull Helm values per tenant from GitOps.
-- Prometheus scrapes metrics via ServiceMonitor; Loki collects logs via Promtail.
+## Scope Delivered
 
-## Implementation
+### Application
 
-- App exposes `/`, `/health`, `/metrics` with Prometheus counters and latency histograms.
-- Helm chart supports per-tenant values and ServiceMonitor configuration.
-- GitHub Actions runs lint/tests, builds the image, pushes to GHCR, and opens a PR to
-  update image tags in GitOps values (`gitops/tenants/`).
-- For local Argo CD, tenant values live under `charts/demo-api/tenants/`.
-- GitLab CI mirrors the pipeline stages for parity and interview discussion.
-- k3d scripts bootstrap a local cluster and install observability + Argo CD.
-- Cloud-native integration (simulated): documentation notes how metrics/logs could be
-  forwarded to CloudWatch or a managed SaaS without requiring an AWS account.
+- FastAPI service with health and Prometheus metrics
+- deterministic failure endpoint (gated for demo use)
 
-## Hardening choices
+### Multi-tenant Kubernetes
 
-- NetworkPolicies restrict ingress to in-namespace traffic and Prometheus scraping,
-  with egress limited to DNS (and optional observability endpoints).
-- Read-only tenant RBAC provides a safe viewer role per namespace.
-- Probes, resource requests/limits, and a PodDisruptionBudget add baseline resilience.
-- Tenant/app/environment labels standardize filtering across metrics and logs.
+- namespace isolation (`tenant-a`, `tenant-b`)
+- shared chart with per-tenant values
+- standardized labels for observability and operations
 
-## Why these choices matter in multi-tenant SaaS
+### CI/CD
 
-- Basic isolation and RBAC reduce cross-tenant risk without heavy operational overhead.
-- Reliability guardrails avoid one tenant impacting others during disruptions.
-- Standard labels keep observability consistent as tenant count scales.
+- GitHub Actions primary pipeline:
+  - PR: lint/test
+  - main: multi-arch build + GHCR push + GitOps promotion PR
+- immutable and moving image tags
+- promotion PR fallback messaging if repo policy blocks action-created PRs
 
-## Results
+### GitOps
 
-- Two isolated namespaces each run the same app with tenant-specific output.
-- Metrics are available per tenant in Prometheus and Grafana.
-- Logs are queryable in Loki by namespace and tenant labels.
+- Argo CD Applications drive deployments from Git state
+- sync options handle rollout CRD bootstrapping safely
 
-## Progressive Delivery Evidence
+### Progressive delivery
 
-- `kind: Rollout` replaces Deployment with canary steps `10 -> 50 -> 100` and pause gates.
-- Automated Prometheus analysis checks both 5xx rate and p95 latency before promotion.
-- No-data-safe PromQL (`or vector(0)`) avoids false crashes during low/no traffic windows.
-- Demo scripts prove both outcomes:
-  - `make canary-success SUCCESS_TAG=main` for successful gated rollout.
-  - `make canary-demo` for forced analysis failure and automatic rollback behavior.
+- Argo Rollouts canary deployment strategy
+- Prometheus-backed AnalysisTemplate for 5xx and latency gates
+- abort/rollback behavior demonstrated via scripts
 
-## Lessons Learned
+### Observability
 
-- Namespace isolation is an effective baseline for SaaS multi-tenancy demos.
-- GitOps keeps deployments predictable but benefits from automated PR workflows.
-- Observability configuration is easiest when labels are consistent across stacks.
+- Prometheus/Grafana/Loki/Promtail installed and wired
+- tenant-aware dashboard and log filtering
+- NodePort exposure for demo-friendly access
+
+### Automation and operations
+
+- idempotent scripts for bootstrap, verification, status, canary demos, and endpoint exposure
+
+## Key Results
+
+- full cluster is reproducibly brought to healthy state from scripts
+- tenant workloads are independently observable and verifiable
+- canary success and failure paths are both demonstrable on demand
+- all primary demo UIs are reachable from stable VPS links
+
+## Hardening Implemented
+
+- probes, resource limits/requests, PDB
+- baseline tenant network policies and RBAC
+- CRD-aware sync settings
+- no secret material in repo
+
+## Challenges and Resolutions
+
+1. **Argo CD login mismatches**
+   - issue: initial admin secret can be stale after password changes
+   - fix: documented reset flow patching active secret + syncing initial secret
+
+2. **Rollout restart edge case**
+   - issue: rollout can remain in `Progressing` with `rollout is restarting`
+   - fix: documented operational recovery by forcing tenant pod rotation
+
+3. **CI promotion PR reliability**
+   - issue: action-created PR blocked by repo settings
+   - fix: CI now emits clear fallback commands without hiding successful image build/push
+
+## Limitations
+
+- namespace tenancy is not strict security isolation
+- centralized observability has shared blast radius
+- NodePort exposure is demo-first, not production ingress best practice
 
 ## Next Steps
 
-- Extend CI to build multi-arch images and add SAST scanning.
-- Add per-tenant quotas, network policy refinements, and stricter RBAC boundaries.
-- Add SLOs/alerts and per-tenant dashboards.
+- add policy-as-code checks (admission controls)
+- add SLO/alert budgets per tenant
+- add signed image verification gate in promotion path
+- move UI access to ingress + TLS in production-like mode
 
-## Mapping to Outsight Internship Responsibilities
+## Internship Responsibility Mapping
 
-- Enhance CI/CD pipelines: GitHub Actions + GitLab CI show lint/test/build/publish flows,
-  image tagging, and GitOps PR updates.
-- Manage Kubernetes deployments: Helm chart + namespaces deploy the same app to multiple
-  tenants with clear configuration overrides.
-- Build/configure observability: Prometheus ServiceMonitors, Grafana dashboard, and Loki
-  queries provide tenant-aware metrics and logs.
-- Integrate cloud-native monitoring services: CloudWatch-style integration is simulated
-  via documentation that explains where exporters or log forwarding would fit.
-- Document architecture and outcomes: `docs/ARCHITECTURE.md`, `docs/RUNBOOK.md`, and this
-  report provide structure for design, execution, and results.
+- **Enhance CI/CD pipelines**
+  - implemented lint/test/build/promote pipeline with auditable GitOps handoff
+
+- **Manage Kubernetes deployments using YAML, Helm, Argo CD**
+  - implemented tenant-scoped Helm values + Argo CD Application model
+
+- **Build observability (Prometheus/Grafana/Loki)**
+  - implemented tenant-aware scraping, dashboarding, and log querying
+
+- **Cloud-native monitoring integration orientation**
+  - architecture supports migration to managed cloud backends without changing core workflow
+
+- **Document architecture and outcomes**
+  - full documentation set now aligned to actual runtime behavior and recovery paths

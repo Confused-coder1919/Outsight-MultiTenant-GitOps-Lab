@@ -1,139 +1,230 @@
 # Repository Context
 
-## Purpose
+This document is the single source of truth for what this project is, how it is wired, how it is operated, and where the tradeoffs are.
 
-This repo is an interview-ready, multi-tenant Kubernetes demo that shows a full DevOps loop:
-CI/CD builds and publishes a container, GitOps updates tenant values, Argo CD syncs the
-cluster, Argo Rollouts performs canary analysis, and Prometheus/Grafana/Loki provide
-observability. It is intentionally small but realistic and runnable locally on k3d or on a VPS.
+If you know nothing about this repository, start here.
 
-## High-level flow
+## 1) Project Intent
 
-1) Developer pushes code.
-2) CI runs lint/tests; on `main` it builds a multi-arch image (`amd64` + `arm64`),
-   pushes immutable and moving tags to GHCR, then opens a PR updating tenant image tags in
-   `charts/demo-api/tenants/*-values.yaml`.
-3) Argo CD watches the repo and syncs the Helm chart with tenant values from
-   `charts/demo-api/tenants/`.
-4) Argo Rollouts applies canary steps and runs Prometheus-backed AnalysisRuns.
-5) Prometheus scrapes each tenant via ServiceMonitor; Grafana dashboards visualize metrics;
-   Loki/Promtail provide tenant-labeled logs.
+`outsight-platform-devops-demo` is an interview-ready DevOps/Platform demonstration of a multi-tenant SaaS deployment model on Kubernetes.
 
-## Key components
+It is built to show practical operational capability, not product complexity.
 
-- App (FastAPI): `app/main.py`
-  - Endpoints: `/`, `/health`, `/metrics`, `/fail?code=...`.
-  - `/fail` is gated by `ENABLE_DEMO_FAILURE_ENDPOINT=true` for demo-only failure injection.
-  - Uses `TENANT_NAME` env var for tenant-specific output and metric labels.
-- Tests: `tests/test_main.py`
-- Container: `Dockerfile` (port 8000)
+Core goals:
 
-## Kubernetes + Helm
+- prove CI/CD maturity (test, lint, build, publish, promote)
+- prove GitOps operations (Argo CD + declarative sync)
+- prove progressive delivery capability (Argo Rollouts + analysis)
+- prove observability capability (Prometheus + Grafana + Loki)
+- prove repeatability locally and on a VPS
+
+## 2) What Runs In The System
+
+### Application
+
+- FastAPI app in `app/main.py`
+- Endpoints:
+  - `/`
+  - `/health`
+  - `/metrics` (Prometheus format)
+  - `/fail?code=...` (demo-only failure injection)
+- Containerized via `Dockerfile` (port `8000`)
+
+### Tenancy Model
+
+- Namespace-per-tenant:
+  - `tenant-a`
+  - `tenant-b`
+- Same chart and app for both tenants
+- Tenant identity comes from values/env (`TENANT_NAME`)
+
+### Deployment Model
 
 - Helm chart: `charts/demo-api`
-  - Templates: Rollout, AnalysisTemplate, Service, ServiceMonitor, PrometheusRule,
-    NetworkPolicy, RBAC, PodDisruptionBudget.
-  - Values: `tenantName`, `image.repository`, `image.tag`, labels, resources, probes,
-    canary analysis thresholds.
-- Tenants (Argo source of truth):
-  - `charts/demo-api/tenants/tenant-a-values.yaml`
-  - `charts/demo-api/tenants/tenant-b-values.yaml`
-- Tenants (legacy GitOps PR path retained):
-  - `gitops/tenants/tenant-a-values.yaml`
-  - `gitops/tenants/tenant-b-values.yaml`
-
-## GitOps (Argo CD)
-
-- Applications:
+- Argo CD Applications:
   - `gitops/argocd/tenant-a-app.yaml`
   - `gitops/argocd/tenant-b-app.yaml`
-- Each points to `charts/demo-api` and uses in-chart tenant value files.
-- Sync options include `CreateNamespace=true` and `SkipDryRunOnMissingResource=true`.
+- Argo CD sync target values used for runtime deployments:
+  - `charts/demo-api/tenants/tenant-a-values.yaml`
+  - `charts/demo-api/tenants/tenant-b-values.yaml`
 
-## Progressive delivery
+### Progressive Delivery
 
-- Workload object is `kind: Rollout` (Argo Rollouts).
-- Canary steps: `10% -> pause 30s -> 50% -> pause 60s -> 100%`.
-- `AnalysisTemplate` evaluates:
-  - 5xx rate `< 2%`
-  - p95 latency `< 500ms`
-- Prometheus queries are no-data-safe (`or vector(0)`), preventing empty-result runtime issues.
+- Workload type is `Rollout` (not Deployment)
+- Canary sequence:
+  - 10%
+  - pause 30s
+  - 50%
+  - pause 60s
+  - 100%
+- Analysis with Prometheus metrics via `AnalysisTemplate`
+- Abort/rollback on failed analysis
 
-## CI/CD
+### Observability
 
-- GitHub Actions: `.github/workflows/ci.yml`
-  - PRs: lint + tests only.
-  - Push to `main`: build/push multi-arch image (`sha-<shortsha>`, `main`, `dev`) and open a GitOps PR.
-  - Uses lowercase GHCR repo: `ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-api`.
-  - If GitHub repo settings block action-created PRs, workflow logs a clear warning and prints manual fallback commands instead of failing the whole pipeline.
-- GitLab CI: `.gitlab-ci.yml` (parity reference).
+- Namespace: `observability`
+- Stack:
+  - kube-prometheus-stack (Prometheus + Grafana)
+  - Loki + Promtail
+- Tenant-aware signals:
+  - metrics via ServiceMonitor labels
+  - logs via promtail relabeling (`tenant`, `app`, `environment`)
 
-## Observability
+## 3) CI/CD + GitOps Flow
 
-- Helm values:
-  - `observability/helm-values/kube-prometheus-stack-values.yaml`
-  - `observability/helm-values/loki-stack-values.yaml`
-- Grafana dashboard JSON:
-  - `observability/grafana/dashboards/tenant-overview.json`
-- Loki queries:
-  - `observability/LOKI_QUERIES.md`
-- External demo NodePorts:
-  - Argo CD `30443`
-  - Grafana `30000`
-  - Prometheus `30090`
-  - Loki `31000`
+Workflow file: `.github/workflows/ci.yml`
 
-## Scripts (idempotent)
+### PR flow
 
-- `scripts/bootstrap_k3d.sh`: create local k3d cluster.
-- `scripts/install_argocd.sh`: install Argo CD, then call rollouts installer.
-- `scripts/install_argo_rollouts.sh`: install Argo Rollouts CRDs/controller via Helm.
-- `scripts/install_observability.sh`: install Prometheus/Grafana/Loki.
-- `scripts/deploy_gitops.sh`: apply Argo CD Applications.
-- `scripts/bootstrap_vps.sh`: Terraform-based VPS bootstrap + health checks.
-- `scripts/run_local_k3d.sh`: end-to-end local demo runner.
-- `scripts/verify.sh`: cluster + app verification including rollout checks.
-- `scripts/loadgen.sh`: deterministic healthy/error traffic generation.
-- `scripts/canary_demo.sh`: failing canary demo with auto-revert (no git commits, no yq dependency).
-- `scripts/canary_success.sh`: healthy canary demo path using override tag and healthy traffic.
-- `scripts/vps_status.sh`: nodes/apps/rollouts + terraform URLs summary.
-- `scripts/open_demo_ports.sh`: exposes NodePorts and prints all demo links + credential commands.
+- Run lint and tests only
+- No image push
+- No promotion PR
 
-## Terraform bootstrap
+### Main branch flow
 
-- `infra/terraform/` bootstraps VPS k3s + ingress-nginx + Argo CD + Argo Rollouts + observability stack.
-- Can bootstrap Argo Applications from `gitops/argocd/`.
-- k3s installs with Traefik disabled (`--disable traefik`).
+- Build and push multi-arch image to GHCR (`amd64`, `arm64`)
+- Image tags:
+  - immutable: `sha-<shortsha>`
+  - moving: `main`, `dev`
+- Update tenant values in:
+  - `charts/demo-api/tenants/tenant-a-values.yaml`
+  - `charts/demo-api/tenants/tenant-b-values.yaml`
+- Open GitOps PR using `peter-evans/create-pull-request`
 
-## Docs
+### CI resilience behavior
 
-- `docs/ARCHITECTURE.md`
-- `docs/RUNBOOK.md`
-- `docs/QUICKSTART.md`
-- `docs/DEMO_SCRIPT.md`
-- `docs/INTERVIEW_TALK_TRACK.md`
-- `docs/REPORT.md`
+If action-based PR creation is blocked by repo settings, workflow logs a clear warning with manual fallback commands instead of failing the whole pipeline after successful build/push.
 
-## Quick commands
+## 4) Infrastructure Bootstrap Modes
+
+### A) Local mode (k3d)
+
+- `make local-up`
+- `make local-verify`
+
+### B) VPS mode (Terraform + k3s)
+
+Terraform in `infra/terraform/` installs:
+
+- k3s (traefik disabled)
+- ingress-nginx
+- Argo CD
+- Argo Rollouts
+- kube-prometheus-stack
+- loki-stack
+
+Then it applies GitOps app manifests from `gitops/argocd/`.
+
+## 5) Runtime Access Model
+
+### Public demo endpoints (NodePort)
+
+After `make open-ports`:
+
+- Argo CD: `https://<vps-ip>:30443`
+- Grafana: `http://<vps-ip>:30000`
+- Prometheus: `http://<vps-ip>:30090`
+- Loki readiness: `http://<vps-ip>:31000/ready`
+
+### Internal app endpoints (ClusterIP)
+
+Tenant app services remain internal by design. Use port-forward:
+
+- `kubectl -n tenant-a port-forward svc/demo-api 18080:8000`
+- `kubectl -n tenant-b port-forward svc/demo-api 28080:8000`
+
+## 6) Credentials Reality (Important)
+
+### Argo CD
+
+- Username is `admin`
+- Password is expected from `argocd-initial-admin-secret`
+- But that initial secret can become stale after password changes
+
+Canonical retrieval command:
 
 ```bash
-make local-up
-make local-verify
-make demo-traffic
-make argo-rollouts
-make canary-success SUCCESS_TAG=main TRAFFIC_SECONDS=120 WAIT_SECONDS=420
-make canary-demo TRAFFIC_SECONDS=120 WAIT_SECONDS=420
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 ```
 
-## Expected tenant behavior
+If invalid, reset password by patching `argocd-secret` and restarting `argocd-server`.
 
-- `tenant-a` returns `{ "tenant": "tenant-a" }` at `/`.
-- `tenant-b` returns `{ "tenant": "tenant-b" }` at `/`.
-- `/metrics` exposes tenant-labeled Prometheus metrics.
+### Grafana
 
-## Notes for reviewers
+Credentials come from secret `kube-prometheus-stack-grafana` in `observability` namespace.
 
-- Namespace isolation is the multi-tenant model for this demo.
-- Canary gates are tenant-scoped and driven by Prometheus analysis.
-- Centralized observability trades simplicity for shared blast radius.
-- GitOps PR flow keeps changes auditable.
+## 7) Hardening Implemented
+
+- liveness/readiness probes
+- requests/limits
+- PodDisruptionBudget
+- tenant labels on workloads/services/metrics/logs
+- tenant-level RBAC viewer role
+- NetworkPolicy baseline
+- Argo sync safety for CRDs (`SkipDryRunOnMissingResource=true`)
+
+## 8) Scripts You Should Know
+
+- `scripts/install_argo_rollouts.sh` - ensures rollouts CRD/controller exists
+- `scripts/open_demo_ports.sh` - exposes/prints all NodePort UI links
+- `scripts/verify.sh` - end-to-end cluster + app verification
+- `scripts/vps_status.sh` - concise status + URLs + credential commands
+- `scripts/canary-success.sh` - deterministic healthy canary demo
+- `scripts/canary_demo.sh` - deterministic failing canary demo with cleanup
+
+## 9) Known Tradeoffs and Limitations
+
+- Namespace-per-tenant is practical but not hard multi-tenant isolation
+- Centralized observability is simpler but has shared blast radius
+- App services are ClusterIP; explicit port-forward is needed for direct app UI checks
+- GitOps promotion depends on GitHub repo settings allowing action-created PRs
+- Argo CD initial admin secret can diverge from active password after resets
+
+## 10) “Demo Ready” Checklist
+
+Run in order:
+
+```bash
+export KUBECONFIG=$(pwd)/infra/terraform/kubeconfig.yaml
+make rollouts-up
+make gitops
+make open-ports
+./scripts/verify.sh
+./scripts/vps_status.sh
+WAIT_SECONDS=180 TRAFFIC_SECONDS=30 make canary-success
+```
+
+Pass criteria:
+
+- Argo apps `Synced/Healthy`
+- rollouts present in tenant namespaces
+- all endpoint URLs reachable
+- `/health` and `/metrics` checks pass for both tenants
+
+## 11) If Something Breaks
+
+### Argo login fails with "invalid"
+
+- initial admin secret may be stale
+- reset admin password in `argocd-secret` and restart `argocd-server`
+
+### Rollout command hangs on restart
+
+- rollout can stay in `Progressing` with `rollout is restarting` if pods did not rotate
+- delete tenant pods once to force re-creation and state convergence
+
+### CI build succeeds but promotion PR missing
+
+- enable GitHub Actions PR creation permission in repo settings
+- use fallback commands emitted by CI workflow logs
+
+## 12) File Map For Reviewers
+
+- Platform entry: `README.md`
+- Ops context: `docs/CONTEXT.md`
+- Design/tradeoffs: `docs/ARCHITECTURE.md`
+- Operational commands: `docs/RUNBOOK.md`
+- Quick start path: `docs/QUICKSTART.md`
+- Live interview script: `docs/DEMO_SCRIPT.md`
+- Interview narrative: `docs/INTERVIEW_TALK_TRACK.md`
+- Outcome summary: `docs/REPORT.md`

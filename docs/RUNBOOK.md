@@ -1,160 +1,182 @@
 # Runbook
 
-This runbook provisions a local k3d cluster, installs Argo CD and observability,
-and deploys both tenants via GitOps.
+Operational guide to run the project end-to-end in both VPS and local modes.
 
-## Prerequisites
+## 1) Prerequisites
 
-- Docker
+- Docker (daemon running)
 - kubectl
 - helm
-- k3d
-- Optional: `kubectl-argo-rollouts` plugin for richer canary inspection
+- terraform (for VPS mode)
+- python3 + pip
+- Optional but recommended: `kubectl-argo-rollouts`, `argocd`
 
-## Clone and enter repo
+Quick check:
 
 ```bash
-git clone https://github.com/confused-coder1919/outsight-platform-devops-demo.git
-cd outsight-platform-devops-demo
+make help
 ```
 
-## Create local cluster
+## 2) Select Cluster Context
+
+For VPS mode:
 
 ```bash
-make k3d
+cd /Users/syedtashfin/Documents/GitHub/outsight-platform-devops-demo
+export KUBECONFIG=$(pwd)/infra/terraform/kubeconfig.yaml
+kubectl get nodes
 ```
 
-## Install observability
+For local k3d mode, use `make local-up` and `make local-verify`.
+
+## 3) Bring Platform To Ready State
 
 ```bash
-make observability
-```
-
-## Install Argo CD
-
-```bash
-make argocd
-```
-
-## Ensure Argo Rollouts CRDs/controller (idempotent)
-
-```bash
-make argo-rollouts
-kubectl get crd rollouts.argoproj.io
-```
-
-## Deploy GitOps applications
-
-```bash
+make rollouts-up
 make gitops
-```
-
-If you are not pulling from GHCR, build the local image first (see "Local image" below).
-
-## Verify workloads
-
-```bash
-kubectl get ns
-kubectl get pods -n tenant-a
-kubectl get pods -n tenant-b
-```
-
-## Access the app
-
-```bash
-kubectl -n tenant-a port-forward svc/demo-api 8081:8000
-curl http://localhost:8081/
-
-kubectl -n tenant-b port-forward svc/demo-api 8082:8000
-curl http://localhost:8082/
-```
-
-## Access Argo CD UI
-
-```bash
-kubectl -n argocd port-forward svc/argocd-server 8083:443
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
-```
-
-Open https://localhost:8083 and login as `admin` with the decoded password.
-
-## Open all VPS demo ports (Argo + Grafana + Prometheus + Loki)
-
-```bash
 make open-ports
 ```
 
-Expected direct URLs:
+What this guarantees:
 
-- `https://<vps-ip>:30443` (Argo CD)
-- `http://<vps-ip>:30000` (Grafana)
-- `http://<vps-ip>:30090` (Prometheus)
-- `http://<vps-ip>:31000/ready` (Loki readiness/API)
+- Argo Rollouts CRD/controller present
+- Argo CD Applications applied
+- external NodePorts exposed for demo UIs
 
-## Access Grafana
+## 4) Verify Baseline Health
 
 ```bash
-kubectl -n observability port-forward svc/kube-prometheus-stack-grafana 3000:80
+./scripts/verify.sh
+./scripts/vps_status.sh
 ```
 
-Open http://localhost:3000 and login with `admin` / `admin`.
-Import the dashboard from `observability/grafana/dashboards/tenant-overview.json`.
+Expected:
 
-## View logs in Loki
+- both Argo apps: `Synced / Healthy`
+- both tenant rollouts: `Healthy`
+- both tenant pods: running
 
-In Grafana Explore, select the Loki datasource and try the queries in:
-`observability/LOKI_QUERIES.md`.
+## 5) Access UIs
 
-## Optional: local image build
+- Argo CD: `https://<vps-ip>:30443`
+- Grafana: `http://<vps-ip>:30000`
+- Prometheus: `http://<vps-ip>:30090`
+- Loki readiness: `http://<vps-ip>:31000/ready`
+
+If needed, print current URLs again:
+
+```bash
+./scripts/vps_status.sh
+```
+
+## 6) Credentials
+
+### Argo CD
+
+- Username: `admin`
+- Password retrieval:
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+```
+
+If login is invalid, initial secret may be stale. Reset and sync both secrets:
+
+```bash
+NEW_PASS='<new-strong-password>'
+HASH=$(argocd account bcrypt --password "$NEW_PASS")
+kubectl -n argocd patch secret argocd-secret --type merge -p "{\"stringData\":{\"admin.password\":\"$HASH\",\"admin.passwordMtime\":\"$(date -u +%FT%TZ)\"}}"
+kubectl -n argocd patch secret argocd-initial-admin-secret --type merge -p "{\"stringData\":{\"password\":\"$NEW_PASS\"}}"
+kubectl -n argocd rollout restart deployment argocd-server
+```
+
+### Grafana
+
+```bash
+kubectl -n observability get secret kube-prometheus-stack-grafana -o jsonpath='{.data.admin-user}' | base64 -d; echo
+kubectl -n observability get secret kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' | base64 -d; echo
+```
+
+## 7) Tenant API/metrics access
+
+Tenant services are ClusterIP. Use port-forward:
+
+```bash
+kubectl -n tenant-a port-forward svc/demo-api 18080:8000
+kubectl -n tenant-b port-forward svc/demo-api 28080:8000
+```
+
+Validate:
+
+```bash
+curl http://127.0.0.1:18080/health
+curl http://127.0.0.1:18080/metrics | head
+curl http://127.0.0.1:28080/health
+curl http://127.0.0.1:28080/metrics | head
+```
+
+## 8) Progressive Delivery Operations
+
+### Success path
+
+```bash
+WAIT_SECONDS=300 TRAFFIC_SECONDS=60 make canary-success
+```
+
+### Failure path (auto rollback demonstration)
+
+```bash
+WAIT_SECONDS=300 TRAFFIC_SECONDS=60 make canary-demo
+```
+
+Inspect rollout/analysis:
+
+```bash
+kubectl -n tenant-a get rollouts.argoproj.io
+kubectl -n tenant-a get analysisruns.argoproj.io --sort-by=.metadata.creationTimestamp
+kubectl argo rollouts get rollout demo-api -n tenant-a
+```
+
+## 9) Known Ops Pitfalls
+
+### Rollout restart appears stuck
+
+Symptom: rollout shows `Progressing` with `rollout is restarting` for too long.
+
+Recovery:
+
+```bash
+kubectl -n tenant-a delete pod -l app.kubernetes.io/instance=demo-api-tenant-a
+kubectl -n tenant-b delete pod -l app.kubernetes.io/instance=demo-api-tenant-b
+```
+
+### CI build succeeds but no promotion PR
+
+Check repo setting:
+
+- GitHub Actions must be allowed to create/approve pull requests.
+
+Fallback commands are printed in CI logs.
+
+### Image pull failures
+
+Check GHCR visibility and tag existence:
+
+```bash
+kubectl -n tenant-a describe pod <pod>
+```
+
+## 10) Local Mode (k3d)
+
+```bash
+make local-up
+make local-verify
+```
+
+For local-only app sanity:
 
 ```bash
 make docker-build TAG=dev
-```
-
-## Optional: local container run
-
-```bash
 make docker-run TAG=dev
 curl http://127.0.0.1:8000/health
-curl http://127.0.0.1:8000/metrics | head -n 5
 ```
-
-## Local image (no GHCR)
-
-Build the image with the same GHCR name used by the chart so k3d can find it locally
-when `imagePullPolicy: IfNotPresent` is set.
-
-```bash
-docker build -t ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-api:dev .
-```
-
-## Progressive delivery checks
-
-Successful canary:
-
-```bash
-SUCCESS_TAG=main TRAFFIC_SECONDS=120 WAIT_SECONDS=420 make canary-success
-```
-
-Failure and rollback demo:
-
-```bash
-TRAFFIC_SECONDS=120 WAIT_SECONDS=420 make canary-demo
-```
-
-Inspect rollout and analysis runs:
-
-```bash
-kubectl -n tenant-a get rollout demo-api -o wide
-kubectl -n tenant-a get analysisrun --sort-by=.metadata.creationTimestamp
-```
-
-## Notes
-
-- Update the Git repository URL in `gitops/argocd/tenant-a-app.yaml` and
-  `gitops/argocd/tenant-b-app.yaml` to point at your fork.
-- Update `image.repository` in `charts/demo-api/tenants/*.yaml` to match your GHCR path.
-- For CI/GitOps PRs, keep `gitops/tenants/*.yaml` aligned with the same image repo.
-- Keep `.github/workflows/ci.yml` `IMAGE_REPO` aligned with the same GHCR path.
-- For local Argo CD, tenant values live in `charts/demo-api/tenants/`. If you change
-  `gitops/tenants/`, copy those updates into the chart tenant files.

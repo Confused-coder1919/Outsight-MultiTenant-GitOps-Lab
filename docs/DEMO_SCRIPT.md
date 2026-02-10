@@ -1,174 +1,109 @@
-# Demo Script: CI -> GHCR -> GitOps -> Argo CD -> Rollouts -> Observability
+# Demo Script
 
-## 2-minute pitch
+Use this script to run a clean 8-10 minute interview demo.
 
-1. Open a PR and show GitHub Actions running lint + tests only.
-2. Merge to `main`; CI builds and pushes a multi-arch image (`linux/amd64,linux/arm64`) to GHCR.
-3. CI opens a GitOps PR that bumps tenant image tags to immutable `sha-<shortsha>`.
-4. Merge that GitOps PR; Argo CD syncs tenant apps and Argo Rollouts performs canary progression.
-5. Show tenant-aware metrics/logs in Grafana and Loki, then run canary success/failure demos.
+## 1) 2-minute framing
 
-## CI and promotion flow (talk track)
+- This is a multi-tenant SaaS platform demo on Kubernetes.
+- CI builds and publishes multi-arch images.
+- GitOps promotion updates tenant values through PRs.
+- Argo CD syncs, Argo Rollouts gates deployment quality.
+- Prometheus/Grafana/Loki provide tenant-aware observability.
 
-1. Create a small PR and point out PR-only checks (fast lint/test).
-2. Merge to `main` and open Actions logs for buildx multi-arch push.
-3. Show generated GitOps PR: `chore(gitops): bump demo-api to sha-<shortsha>`.
-4. Merge GitOps PR and verify Argo apps are `Synced` and `Healthy`.
-
-## Baseline verification commands
+## 2) Pre-demo prep
 
 ```bash
-kubectl -n argocd get applications -o wide
-kubectl -n tenant-a get pods
-kubectl -n tenant-b get pods
-kubectl get rollout -A
-```
+cd /Users/syedtashfin/Documents/GitHub/outsight-platform-devops-demo
+export KUBECONFIG=$(pwd)/infra/terraform/kubeconfig.yaml
 
-Open all externally reachable demo endpoints first:
-
-```bash
+make rollouts-up
+make gitops
 make open-ports
+./scripts/verify.sh
 ```
 
-Links to show:
+## 3) Show platform status
+
+```bash
+./scripts/vps_status.sh
+kubectl -n argocd get applications -o wide
+kubectl -n tenant-a get rollouts.argoproj.io,pods
+kubectl -n tenant-b get rollouts.argoproj.io,pods
+```
+
+What to say:
+
+- both tenant apps are reconciled (`Synced/Healthy`)
+- both tenants run same app image with isolated namespace boundaries
+
+## 4) Show UIs and credentials
+
+Open:
 
 - Argo CD: `https://<vps-ip>:30443`
 - Grafana: `http://<vps-ip>:30000`
 - Prometheus: `http://<vps-ip>:30090`
 - Loki readiness: `http://<vps-ip>:31000/ready`
 
+Credential commands:
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+kubectl -n observability get secret kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' | base64 -d; echo
+```
+
+## 5) Show tenant app behavior
+
 ```bash
 kubectl -n tenant-a port-forward svc/demo-api 18080:8000
-curl http://127.0.0.1:18080/health
+kubectl -n tenant-b port-forward svc/demo-api 28080:8000
+```
+
+Then:
+
+```bash
+curl http://127.0.0.1:18080/
+curl http://127.0.0.1:28080/
 curl http://127.0.0.1:18080/metrics | head
 ```
 
-## Progressive Delivery Demo
-
-Pre-check (idempotent):
+## 6) Progressive delivery (success)
 
 ```bash
-make argo-rollouts
-kubectl get crd rollouts.argoproj.io
+WAIT_SECONDS=300 TRAFFIC_SECONDS=60 make canary-success
 ```
 
-Install CLI plugin once (optional):
+Show while running:
 
 ```bash
-brew install argoproj/tap/kubectl-argo-rollouts
+kubectl -n tenant-a get analysisruns.argoproj.io --sort-by=.metadata.creationTimestamp
+kubectl argo rollouts get rollout demo-api -n tenant-a
 ```
 
-### Happy path canary
+Expected outcome:
 
-Use a known-good tag that differs from current tenant value:
+- rollout remains healthy
+- latest AnalysisRun is successful
+
+## 7) Progressive delivery (failure + auto-abort)
 
 ```bash
-SUCCESS_TAG=main TRAFFIC_SECONDS=120 WAIT_SECONDS=420 make canary-success
+WAIT_SECONDS=300 TRAFFIC_SECONDS=60 make canary-demo
 ```
 
-While it runs:
+Expected outcome:
 
-```bash
-kubectl -n tenant-a get rollout demo-api -w
-kubectl -n tenant-a get analysisrun -w
-```
+- canary analysis fails
+- rollout aborts and script cleans up to baseline
 
-Expected:
+## 8) CI/GitOps story (show in GitHub)
 
-- Rollout steps progress: `10% -> pause -> 50% -> pause -> 100%`.
-- Latest `AnalysisRun` ends `Successful`.
-- Rollout `phase` returns to `Healthy`.
+- PR run: lint + test only
+- main run: buildx multi-arch push + GitOps promotion PR
+- if PR creation is blocked by repo policy, workflow emits manual fallback commands
 
-### Failure path canary (auto-abort)
+## 9) Troubleshooting cues
 
-```bash
-TRAFFIC_SECONDS=120 WAIT_SECONDS=420 make canary-demo
-```
-
-What this does:
-
-- Temporarily applies a canary overlay for tenant-a with a forced-fail analysis gate.
-- Generates healthy traffic while the analysis evaluates.
-- Waits for degraded/failed analysis signal.
-- Reverts tenant-a back to chart values automatically at script exit/interruption.
-
-Inspect after/while running:
-
-```bash
-kubectl -n tenant-a get rollout demo-api -o wide
-kubectl -n tenant-a get analysisrun --sort-by=.metadata.creationTimestamp
-kubectl -n tenant-a describe rollout demo-api
-```
-
-## What to show in Argo CD UI
-
-- `demo-api-tenant-a` app sync status and health.
-- Resource tree with `Rollout` instead of `Deployment`.
-- Events around pause, analysis, and abort (for failure demo).
-
-## What to show in Grafana
-
-1. Tenant dashboard request-rate panels (`tenant-a` vs `tenant-b`).
-2. Error-rate changes during failure demo window.
-3. Loki Explore query filtered by tenant:
-
-```logql
-{tenant="tenant-a"}
-```
-
-```logql
-{tenant="tenant-b"}
-```
-
-## URLs and credential commands from Terraform outputs
-
-```bash
-cd infra/terraform
-terraform output -raw argocd_url
-terraform output -raw grafana_url
-terraform output -raw argocd_initial_admin_password_command
-terraform output -raw grafana_admin_password_command
-```
-
-Run the returned password commands only when needed.
-
-## Failure modes and quick diagnosis
-
-### ImagePullBackOff
-
-Causes: tag not found, private GHCR package, wrong architecture.
-
-```bash
-kubectl -n tenant-a describe pod <pod-name>
-```
-
-Checks:
-
-- image tag exists in GHCR (`sha-<shortsha>` from merged GitOps PR)
-- image manifest includes `amd64` and `arm64`
-- package visibility/auth is correct
-
-### Readiness probe failing
-
-```bash
-kubectl -n tenant-a describe pod <pod-name>
-kubectl -n tenant-a logs <pod-name>
-```
-
-Checks:
-
-- app listens on port `8000`
-- `/health` returns 200
-
-### Argo app degraded
-
-```bash
-kubectl -n argocd describe application demo-api-tenant-a
-kubectl -n tenant-a describe rollout demo-api
-```
-
-Common reasons:
-
-- invalid Helm values
-- failed canary analysis
-- image pull/probe failures
+- Argo invalid login from initial secret: stale secret, reset via runbook
+- rollout restart seems stuck: force pod rotation in tenant namespaces
+- ImagePullBackOff: check GHCR tag visibility/auth and architecture manifest

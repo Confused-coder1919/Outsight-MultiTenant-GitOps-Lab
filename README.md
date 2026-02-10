@@ -1,210 +1,168 @@
 # Outsight Platform DevOps Demo
 
-## What this project is (full context in one place)
+A recruiter-grade, end-to-end DevOps platform demo for a multi-tenant SaaS-style workload on Kubernetes.
 
-This repo is an interview-ready, multi-tenant SaaS-style Kubernetes platform demo. It is
-intentionally small, but it models the real workflows a DevOps/Platform engineer would
-own: CI/CD builds and publishes container images, GitOps promotes tenant changes via PR,
-Argo CD reconciles the cluster, and Prometheus/Grafana/Loki provide tenant-aware
-observability. The goal is to show how I think about reliability, isolation, and
-operational clarity in a multi-tenant environment, not to build a large product.
+This repository demonstrates the full operating loop:
 
-## Why it was built (thought process)
+- CI (lint/test/build, multi-arch image publish)
+- GitOps promotion (automated image bump PRs)
+- Argo CD reconciliation into tenant namespaces
+- Argo Rollouts progressive delivery with Prometheus analysis
+- Observability with Prometheus, Grafana, Loki, and Promtail
 
-- Show end-to-end delivery, not just a single tool: lint/tests, image build, GitOps PR,
-  Argo CD sync, and observability are all connected.
-- Demonstrate multi-tenant basics with clean, explainable primitives: namespaces,
-  labels, NetworkPolicy, minimal RBAC, and per-tenant Helm values.
-- Keep it runnable locally (k3d or Docker Desktop) so an interviewer can verify it
-  quickly without any cloud accounts or secrets.
-- Provide clear operational docs (runbook + demo scripts) while keeping this README
-  sufficient on its own for a recruiter to understand the scope and intent.
+It is intentionally compact, but operationally realistic.
 
-## High-level flow (CI → image → GitOps → deploy)
+## What This Project Demonstrates
 
-1) Developer pushes code.
-2) CI runs lint + tests.
-3) On `main`, CI builds a Docker image and pushes to GHCR.
-4) CI opens a PR that updates tenant image tags in `gitops/tenants/*.yaml`.
-5) Argo CD watches the repo and syncs the Helm chart with tenant-specific values into
-   `tenant-a` and `tenant-b` namespaces.
-6) Prometheus scrapes metrics per tenant; Grafana dashboards visualize them; Loki/Promtail
-   provide tenant-labeled logs.
+- Multi-tenant Kubernetes delivery using namespace isolation (`tenant-a`, `tenant-b`)
+- Helm chart reuse with per-tenant values
+- GitHub Actions CI/CD with GHCR publishing (`linux/amd64`, `linux/arm64`)
+- GitOps promotion flow via PR to tenant image tags
+- Progressive delivery (canary + analysis + rollback)
+- Centralized observability with tenant-level filtering
 
-## Architecture summary
+## Architecture At A Glance
 
-```
-+--------------------+        +---------------------------+
-|  GitHub Actions    |  PR    |   GitOps (this repo)      |
-|  lint/test/build   +------->|  gitops/tenants/*.yaml     |
-|  push image to GHCR|        |  charts/demo-api           |
-+---------+----------+        +-------------+-------------+
-          |                                   |
-          |                                   v
-          |                          +-------------------+
-          |                          |   Argo CD          |
-          |                          |   syncs Helm       |
-          |                          +----------+--------+
-          |                                     |
-          v                                     v
-+-------------------+                 +-------------------+
-| GHCR image        |                 |  tenant-a ns      |
-| demo-api:<tag>    |                 |  tenant-b ns      |
-+-------------------+                 +---------+---------+
-                                                |
-                                                v
-                                        +-----------------+
-                                        | Observability   |
-                                        | Prom/Grafana/Loki|
-                                        +-----------------+
+```text
+Developer Push
+   |
+   v
+GitHub Actions (PR: lint/test, main: build+push+promote)
+   |
+   v
+GHCR image tags (sha-<shortsha>, main, dev)
+   |
+   v
+GitOps PR updates charts/demo-api/tenants/*.yaml
+   |
+   v
+Argo CD syncs chart into tenant-a / tenant-b
+   |
+   v
+Argo Rollouts canary + AnalysisTemplate (Prometheus)
+   |
+   v
+Prometheus/Grafana/Loki observe metrics + logs per tenant
 ```
 
-## Repository layout (what to look at)
+## Repo Structure
 
-- App (FastAPI): `app/main.py`
-  - Endpoints: `/`, `/health`, `/metrics`
-  - Uses `TENANT_NAME` env var to differentiate tenant responses and metric labels.
+- App: `app/main.py`
 - Tests: `tests/test_main.py`
-- Container: `Dockerfile` (port 8000)
+- Container: `Dockerfile`
+- Chart: `charts/demo-api`
+- Argo CD apps: `gitops/argocd`
+- Observability values: `observability/helm-values`
+- Automation scripts: `scripts/`
+- Infra bootstrap: `infra/terraform/`
+- Docs: `docs/`
 
-- Helm chart: `charts/demo-api/`
-  - Deploys the app with probes, resource limits, PDB, and NetworkPolicy.
-  - Values support per-tenant overrides (`tenantName`, `image.repository`, `image.tag`).
-  - In-chart tenant values used by Argo CD: `charts/demo-api/tenants/*.yaml`.
+## CI/CD Behavior
 
-- GitOps (Argo CD): `gitops/argocd/`
-  - Two Application manifests for tenant-a and tenant-b.
+Workflow file: `.github/workflows/ci.yml`
 
-- CI/CD:
-  - GitHub Actions: `.github/workflows/ci.yml`
-    - PRs: lint + tests only.
-    - `main` pushes: build/push image to GHCR, update tenant values, open a PR.
-  - GitLab CI: `.gitlab-ci.yml` (parity example).
+- `pull_request`: lint + tests only
+- `push` to `main`:
+  - build and push multi-arch image to GHCR
+  - tags: `sha-<shortsha>`, `main`, `dev`
+  - update `charts/demo-api/tenants/tenant-a-values.yaml` and `tenant-b-values.yaml`
+  - open GitOps PR using `peter-evans/create-pull-request`
 
-- Observability:
-  - `observability/helm-values/` for kube-prometheus-stack + loki-stack
-  - Grafana dashboard: `observability/grafana/dashboards/tenant-overview.json`
-  - Loki queries: `observability/LOKI_QUERIES.md`
+Important repository setting for GitOps PR automation:
 
-- Docs:
-  - `docs/RUNBOOK.md`: full end-to-end commands
-  - `docs/ARCHITECTURE.md`: deeper design + tradeoffs
-  - `docs/REPORT.md`: internship mapping and results
-  - `docs/INTERVIEW_TALK_TRACK.md`, `docs/DEMO_SCRIPT.md`
+- GitHub repo settings must allow Actions to create PRs
+- If disabled, workflow now prints explicit manual fallback commands
 
-## Multi-tenant model (simple but realistic)
-
-- Each tenant runs in its own namespace: `tenant-a`, `tenant-b`.
-- Namespace isolation + consistent labels: `tenant`, `app`, `environment`.
-- Minimal NetworkPolicy to limit ingress/egress per tenant.
-- Read-only Role + RoleBinding per tenant for safe access.
-- Same app image, different values (`TENANT_NAME`, image tag).
-
-## Observability model
-
-- Centralized Prometheus/Grafana/Loki in `observability` namespace.
-- ServiceMonitor per tenant so metrics are scraped consistently.
-- Grafana dashboard compares tenant-a vs tenant-b traffic.
-- Loki/Promtail adds tenant labels to logs for filtering.
-
-Tradeoff: centralized observability is simpler to run and demo, but in production you
-might split per-tenant to reduce blast radius or meet compliance requirements.
-
-## Production-like hardening (minimal, explainable)
-
-- Probes: liveness/readiness use `/health`.
-- Resource requests/limits for predictable scheduling.
-- PodDisruptionBudget for safe maintenance.
-- NetworkPolicy to reduce east-west exposure.
-- Minimal RBAC for tenant viewer access.
-
-## Local quickstart (k3d)
+## Quick Start (VPS)
 
 ```bash
-make k3d
-make observability
-make argocd
+cd /Users/syedtashfin/Documents/GitHub/outsight-platform-devops-demo
+export KUBECONFIG=$(pwd)/infra/terraform/kubeconfig.yaml
+
+make rollouts-up
 make gitops
-```
-
-Quick checks:
-```bash
-kubectl get pods -n tenant-a
-kubectl get pods -n tenant-b
-```
-
-## VPS demo URLs (open everything needed for UI/metrics)
-
-```bash
 make open-ports
+./scripts/verify.sh
 ```
 
-This ensures NodePorts are exposed for demo access and prints links:
+## Demo URLs
+
+After `make open-ports`:
 
 - Argo CD: `https://<vps-ip>:30443`
 - Grafana: `http://<vps-ip>:30000`
 - Prometheus: `http://<vps-ip>:30090`
 - Loki readiness/API: `http://<vps-ip>:31000/ready`
 
-Credentials:
+## Credentials
+
+### Argo CD
+
+- Username: `admin`
+- Password source:
 
 ```bash
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
+```
+
+If login fails, the initial secret may be stale. Reset safely:
+
+```bash
+NEW_PASS='<new-strong-password>'
+HASH=$(argocd account bcrypt --password "$NEW_PASS")
+kubectl -n argocd patch secret argocd-secret --type merge -p "{\"stringData\":{\"admin.password\":\"$HASH\",\"admin.passwordMtime\":\"$(date -u +%FT%TZ)\"}}"
+kubectl -n argocd patch secret argocd-initial-admin-secret --type merge -p "{\"stringData\":{\"password\":\"$NEW_PASS\"}}"
+kubectl -n argocd rollout restart deployment argocd-server
+```
+
+### Grafana
+
+```bash
+kubectl -n observability get secret kube-prometheus-stack-grafana -o jsonpath='{.data.admin-user}' | base64 -d; echo
 kubectl -n observability get secret kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' | base64 -d; echo
 ```
 
-Tenant app endpoints remain internal by design (ClusterIP). Use port-forward:
+## Tenant App Checks
+
+Tenant app services are intentionally `ClusterIP`.
 
 ```bash
 kubectl -n tenant-a port-forward svc/demo-api 18080:8000
 kubectl -n tenant-b port-forward svc/demo-api 28080:8000
+
 curl http://127.0.0.1:18080/health
 curl http://127.0.0.1:18080/metrics | head
+curl http://127.0.0.1:28080/health
+curl http://127.0.0.1:28080/metrics | head
 ```
 
-## Local Docker (sanity check)
+## Progressive Delivery Demo
+
+Success path:
 
 ```bash
-make docker-build TAG=dev
-make docker-run TAG=dev
+WAIT_SECONDS=300 TRAFFIC_SECONDS=60 make canary-success
 ```
+
+Failure path (with auto-revert):
 
 ```bash
-curl http://127.0.0.1:8000/health
-curl http://127.0.0.1:8000/metrics | head -n 5
+WAIT_SECONDS=300 TRAFFIC_SECONDS=60 make canary-demo
 ```
 
-## Local image (no GHCR)
-
-Build the image with the same GHCR name used by the chart so k3d can find it locally
-when `imagePullPolicy: IfNotPresent` is set.
+## Local Development (k3d)
 
 ```bash
-docker build -t ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-api:dev .
+make local-up
+make local-verify
 ```
 
-## CI/CD + GitOps behavior (short)
+## Documentation Index
 
-- PRs: lint + tests only (fast feedback).
-- `main` pushes: build/push image to GHCR, update tenant image tags, open GitOps PR.
-- Argo CD syncs the merged values into tenant namespaces.
-
-Note: Argo CD uses in-chart tenant values (`charts/demo-api/tenants/`). CI updates
-`gitops/tenants/` for the GitOps PR flow, so keep them in sync when demoing locally.
-
-## How this maps to the internship responsibilities
-
-- CI/CD: automated lint/tests, image build/push, GitOps PR for promotion.
-- Kubernetes + Helm + Argo CD: multi-tenant namespaces and per-tenant Helm values.
-- Observability: Prometheus/Grafana/Loki with tenant labels and dashboards.
-- Cloud-native monitoring integration: simulated with documented patterns (no cloud
-  account required).
-- Documentation: architecture, runbook, report, demo scripts.
-
-## Next places to look (if you want more depth)
-
-- `docs/ARCHITECTURE.md`
-- `docs/RUNBOOK.md`
-- `docs/REPORT.md`
-- `docs/INTERVIEW_TALK_TRACK.md`
-- `docs/DEMO_SCRIPT.md`
+- `docs/CONTEXT.md` - full project context from zero
+- `docs/ARCHITECTURE.md` - component-level design and tradeoffs
+- `docs/RUNBOOK.md` - operational run procedures
+- `docs/QUICKSTART.md` - concise command paths
+- `docs/DEMO_SCRIPT.md` - interview demo script
+- `docs/INTERVIEW_TALK_TRACK.md` - pitch + likely Q&A
+- `docs/REPORT.md` - implementation summary and internship mapping

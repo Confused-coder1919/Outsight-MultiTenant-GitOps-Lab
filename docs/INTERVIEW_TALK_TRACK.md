@@ -2,73 +2,93 @@
 
 ## 30-second intro
 
-I built a multi-tenant Kubernetes demo that mirrors a SaaS platform: a tiny FastAPI app deployed to two tenant namespaces via Helm and Argo CD, with GitHub Actions and GitLab CI pipelines, plus Prometheus, Grafana, and Loki for observability. It is intentionally small but realistic, showing CI/CD, GitOps, and tenant-aware monitoring end to end.
+I built a multi-tenant Kubernetes platform demo that shows the full delivery lifecycle: CI builds and publishes an image, GitOps promotes that image via PR, Argo CD reconciles tenant namespaces, Argo Rollouts gates rollout quality, and Prometheus/Grafana/Loki provide tenant-aware observability.
 
-## 2-minute pitch 
+## 2-minute pitch
 
-This repo is a compact, interview-ready platform demo that maps directly to your internship scope. It packages a FastAPI service with `/`, `/health`, and `/metrics`, then deploys it twice into `tenant-a` and `tenant-b` namespaces using a Helm chart and Argo CD. The same image runs for both tenants, but the Helm values inject a tenant name so the API responses and metrics are tenant-labeled.
+This project is intentionally small but operationally complete. The same FastAPI app is deployed to `tenant-a` and `tenant-b` using one Helm chart and tenant-specific values. CI runs lint/tests for pull requests, and on `main` it builds a multi-arch image, pushes to GHCR, and opens a GitOps PR that updates tenant image tags.
 
-On the CI/CD side, GitHub Actions runs lint and tests, builds a container, pushes it to GHCR, and opens a PR that updates the image tag in the GitOps values. That PR is the audit trail, and Argo CD reconciles the cluster to it. A parallel GitLab CI pipeline shows how I would port the same stages to another system.
+Argo CD watches the repository and reconciles changes declaratively. Instead of plain Deployments, I use Argo Rollouts with canary steps and Prometheus analysis to gate promotions. If analysis fails, rollout aborts automatically. For observability, Prometheus scrapes tenant metrics, Grafana visualizes tenant comparisons, and Loki queries logs by tenant labels.
 
-For observability, kube-prometheus-stack scrapes each tenant via ServiceMonitor, Grafana visualizes request rate, latency, and namespace resource usage, and Loki provides per-tenant log queries. The result is a small but complete system that demonstrates CI/CD, Kubernetes deployment management, GitOps flows, and monitoring tradeoffs in a way that is easy to run locally.
+The main point is to demonstrate reliable, auditable, and explainable platform operations, not just cluster setup.
 
-## Walkthrough (step-by-step narrative)
+## 5-minute technical walkthrough
 
-1) Start at the app: `app/main.py` is a tiny FastAPI service with `/`, `/health`, and `/metrics`. It adds Prometheus counters and latency histograms and logs each request with the tenant name.
-2) Containerize: `Dockerfile` builds a minimal image. This mirrors how the CI system will publish artifacts.
-3) Helm chart: `charts/demo-api` templates Deployment, Service, and ServiceMonitor. The chart is parameterized by `tenantName`, `image.repository`, and `image.tag`.
-4) Multi-tenant config: Argo CD reads tenant values from `charts/demo-api/tenants/` for local
-   compatibility, while `gitops/tenants/` is the GitOps layer updated by CI. Both set the
-   tenant name and image tag.
-5) GitOps: `gitops/argocd/*-app.yaml` defines two Argo CD Applications, each pointing at the same chart but with different values and namespaces. Argo CD creates the namespaces and keeps them reconciled.
-6) CI/CD: `.github/workflows/ci.yml` runs lint/tests, builds and pushes to GHCR, then opens a PR updating the GitOps values. That PR is what drives the deployment change, which is a common production pattern. `.gitlab-ci.yml` mirrors the same logic for parity.
-7) Observability: `observability/helm-values/*` installs kube-prometheus-stack and Loki. The chart’s ServiceMonitor uses a release label that matches the Prometheus selector so each tenant is scraped. Grafana uses a tenant dashboard from `observability/grafana/dashboards/tenant-overview.json`.
-8) Run locally: `scripts/` provide idempotent setup for k3d, Argo CD, observability, and GitOps deployment. The `docs/RUNBOOK.md` gives exact commands.
+1. **Start from CI pipeline**
+   - show `.github/workflows/ci.yml`
+   - explain PR vs main behavior
+   - highlight image tags and GitOps PR automation
 
-## Insights 
+2. **Show GitOps deployment model**
+   - `gitops/argocd/tenant-a-app.yaml`, `tenant-b-app.yaml`
+   - explain chart reuse and tenant values separation
+
+3. **Show rollout-based delivery**
+   - `charts/demo-api/templates/rollout.yaml`
+   - canary sequence and analysis template
+
+4. **Show observability path**
+   - ServiceMonitor and dashboard JSON
+   - Loki label filtering for tenant-level logs
+
+5. **Show operations scripts**
+   - `verify.sh`, `vps_status.sh`, `canary-success`, `canary-demo`, `open_demo_ports.sh`
+
+## If asked deeper
 
 ### CI/CD
-- Why a PR step? It creates an audit trail and aligns with GitOps, so the cluster changes are always visible and reviewable.
-- Why GHCR? It is a standard registry for GitHub-native workflows and easy to configure with repository-level permissions.
+
+- Why immutable tags? deterministic rollback and reproducibility
+- Why PR-based promotion? auditable deployment intent
+- What if CI cannot create PR? workflow now emits manual fallback commands
 
 ### GitOps
-- Argo CD Applications point to the chart plus tenant values. This keeps the chart reusable and tenant config explicit.
-- `CreateNamespace=true` makes the onboarding flow hands-free while still allowing RBAC and quotas per tenant.
+
+- Why Argo CD? continuous reconciliation and clear desired-state model
+- Why chart values under `charts/demo-api/tenants`? stable path resolution for Argo source
 
 ### Multi-tenant model
-- Namespace isolation is a simple and common baseline. It’s not a hard security boundary, but it’s realistic for a demo.
-- The app reads `TENANT_NAME` from env to show how the same image can behave differently.
+
+- Why namespaces? simplest useful isolation boundary for demo and many SaaS workloads
+- What would stronger isolation add? per-tenant clusters/virtual clusters, stricter policy controls
+
+### Progressive delivery
+
+- Why no mesh? keep demo lightweight and reproducible while still proving canary analysis gates
+- How rollback works? failed AnalysisRun causes rollout abort, stable ReplicaSet remains
 
 ### Observability
-- Centralized Prometheus/Grafana/Loki reduces ops overhead but increases shared blast radius; labels are critical.
-- Each tenant has its own ServiceMonitor so metrics can be filtered by namespace.
 
-### Tradeoffs
-- GitOps PRs are slower than direct deploys, but they improve traceability and reduce config drift.
-- Centralized observability is easy to manage but may need stronger tenancy controls in production.
+- Metrics per tenant: service monitor labels + namespace filters
+- Logs per tenant: promtail relabeling for `tenant`, `app`, `environment`
 
-## Questions + sample answers
+### Security/ops
 
-1) Why use GitOps for such a small demo?
-- It mirrors how production systems avoid config drift and make changes auditable. Even in a demo, it shows the workflow: build artifact -> change Git -> reconciler applies it.
+- baseline policies: network policy, RBAC, probes, limits, PDB
+- no secrets committed in repo
 
-2) How would you harden tenant isolation beyond namespaces?
-- Add NetworkPolicies, RBAC per namespace, resource quotas, and optionally separate node pools. For stronger isolation, use separate clusters or virtual clusters.
+## 8 likely questions and strong sample answers
 
-3) Why choose Helm instead of raw YAML or Kustomize?
-- Helm is common in platform teams and makes parameterizing image tags and per-tenant values straightforward. It also integrates naturally with Argo CD.
+1. **How do you avoid config drift?**
+   - GitOps is the source of truth; Argo continuously reconciles actual state to git state.
 
-4) What happens if the ServiceMonitor label does not match Prometheus?
-- Prometheus will not scrape the service. That is why the chart defaults the label to `release: kube-prometheus-stack` and docs call it out explicitly.
+2. **How do you prove tenant isolation?**
+   - Separate namespaces, tenant labels, and tenant-scoped RBAC/network policy.
 
-5) How do you ensure CI/CD and GitOps stay in sync?
-- The workflow updates the GitOps values via PR using the same image tag it just built. That tag is the single source of truth.
+3. **How do you handle bad releases?**
+   - Argo Rollouts canary with Prometheus analysis aborts automatically.
 
-6) How would you add alerts or SLOs?
-- Add PrometheusRule resources via Helm and create Grafana alert rules. SLOs could be computed on request latency and error rates per namespace.
+4. **Why multi-arch images?**
+   - ensures both local arm64 dev machines and amd64 VPS runtimes pull the same logical release tag.
 
-7) What would you change for a real multi-tenant SaaS?
-- Stronger isolation, per-tenant quotas, per-tenant auth policies, separate observability projects, and more robust secrets management.
+5. **Where are your weakest points?**
+   - namespace isolation and centralized observability are pragmatic but not strict enterprise isolation.
 
-8) What is the biggest risk in this design?
-- Centralized observability and shared cluster access can create noisy neighbors or blast radius issues. I would mitigate with quotas, rate limits, and strict RBAC.
+6. **What if Argo login fails with the initial secret?**
+   - initial secret can be stale; reset active admin password in `argocd-secret` and restart server.
+
+7. **What if rollout restart hangs?**
+   - known restart edge case can leave `rollout is restarting`; force pod rotation to converge.
+
+8. **How do you move this toward production?**
+   - ingress+TLS, stronger policy enforcement, SLO-driven alerts, signed artifact verification, managed backend hardening.

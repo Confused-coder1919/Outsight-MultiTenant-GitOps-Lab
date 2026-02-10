@@ -1,101 +1,130 @@
 # Architecture
 
-## ASCII diagram
+## 1) System Overview
 
-Developer
-  |
-  v
-GitHub Actions / GitLab CI
-  |        \
-  |         \__ Docker image -> GHCR
-  |
-  v
-GitOps repo (Helm values)
-  |
-  v
-Argo CD
-  |
-  v
-Kubernetes (k3d)
-  |-- namespace: tenant-a -> demo-api
-  |-- namespace: tenant-b -> demo-api
-  |
-  +--> Observability
-       |-- Prometheus (scrapes ServiceMonitor per namespace)
-       |-- Grafana (dashboards)
-       +-- Loki + Promtail (logs per namespace)
+This project is a Kubernetes platform demo with four tightly connected concerns:
 
-## CI -> Image -> GitOps -> Deploy flow
+- CI/CD artifact production
+- GitOps-based deployment control
+- multi-tenant runtime isolation
+- observability and progressive delivery safety gates
 
-- Developer pushes code to GitHub/GitLab.
-- CI runs lint/tests, builds a container, and pushes to GHCR (image repo is lowercased for GHCR compatibility).
-- On pushes to `main`, GitHub Actions opens a PR updating `gitops/tenants/*-values.yaml` with the new tag.
-- Argo CD watches the repo and syncs the updated Helm values into each tenant namespace.
-- Local note: Argo CD reads tenant values from `charts/demo-api/tenants/` to avoid path traversal.
+## 2) End-to-End Flow
 
-## Progressive Delivery with Analysis (no mesh)
+```text
+Code Push
+  -> GitHub Actions (lint/test/build)
+  -> GHCR image publish (sha/main/dev, multi-arch)
+  -> GitOps PR updates tenant image tags
+  -> Argo CD syncs Helm chart into tenant namespaces
+  -> Argo Rollouts canary + analysis gates promotion
+  -> Prometheus/Grafana/Loki observe result per tenant
+```
 
-- The workload uses `kind: Rollout` (not Deployment) with canary steps:
-  `10% -> pause 30s -> 50% -> pause 60s -> 100%`.
-- Each canary promotion runs an `AnalysisTemplate` against Prometheus metrics:
-  - 5xx rate must stay below 2%.
-  - p95 latency must stay below 500ms.
-- Prometheus queries use a no-data fallback (`or vector(0)`) so analysis stays deterministic when traffic is low.
-- If analysis fails, Rollouts aborts promotion and keeps/reverts to stable pods.
-- This gives controlled exposure with automated safety checks for each tenant namespace without service mesh complexity.
+## 3) Components
 
-## Why GitOps
+### Application
 
-- Git is the single source of truth for tenant config and image versions.
-- PRs provide an audit trail and make promotion explicit and reviewable.
+- FastAPI app
+- `/health` for probes
+- `/metrics` for Prometheus
+- optional `/fail` endpoint for controlled canary-failure demo
 
-## Why namespace-per-tenant
+### Packaging
 
-- It is the simplest isolation boundary in Kubernetes and easy to reason about.
-- It maps cleanly to per-tenant quotas, RBAC, and NetworkPolicy.
+- Docker image published to GHCR
+- immutable deploy tag: `sha-<shortsha>`
 
-## Multi-tenant model (namespace isolation)
+### Deployment
 
-- Each tenant gets a dedicated namespace (`tenant-a`, `tenant-b`).
-- The same Helm chart is deployed twice with different `tenantName` values.
-- This keeps workloads separated and provides tenant-scoped metrics/logs via namespace labels.
+- Helm chart in `charts/demo-api`
+- two tenant values files for Argo runtime deployment
 
-## Observability model
+### GitOps
 
-- Centralized stack in `observability` namespace (Prometheus, Grafana, Loki).
-- Each tenant deploys its own ServiceMonitor so metrics are scraped per namespace.
-- Promtail carries tenant/app/environment labels into logs for targeted Loki queries.
-- Optional cloud-native integration: in production, the same metrics/logs could be
-  forwarded to CloudWatch or a managed SaaS; here it is documented only.
+- Argo CD Applications under `gitops/argocd/`
+- `CreateNamespace=true`
+- `SkipDryRunOnMissingResource=true` for rollout CRD safety
 
-## Centralized vs tenant-isolated observability
+### Progressive Delivery
 
-- Centralized observability is cheaper and simpler but increases shared blast radius.
-- Tenant-isolated observability reduces risk but adds operational cost and complexity.
+- `Rollout` with canary steps and pauses
+- `AnalysisTemplate` queries Prometheus for:
+  - 5xx ratio
+  - p95 latency
+- failed analysis aborts promotion
 
-## Hardening choices
+### Observability
 
-- NetworkPolicy limits ingress to in-namespace traffic plus Prometheus scraping, and
-  restricts egress to DNS (and optional observability endpoints).
-- Per-tenant read-only RBAC (tenant viewer) provides safe, scoped visibility.
-- Probes and resource requests/limits enforce basic reliability guardrails.
-- PodDisruptionBudget keeps at least one pod available during voluntary disruptions.
-- Tenant/app/environment labels standardize filtering across metrics and logs.
+- Prometheus scrapes tenant ServiceMonitors
+- Grafana dashboard compares tenant-a vs tenant-b
+- Loki stores logs with tenant labels from promtail relabeling
 
-## Why these choices matter in multi-tenant SaaS
+## 4) Multi-Tenant Design
 
-- Isolation controls reduce noisy neighbor risk and accidental cross-tenant access.
-- RBAC and labeling provide safe, predictable visibility without over-privileging.
-- Reliability guardrails prevent cascading failures from impacting all tenants.
+- isolation boundary: Kubernetes namespace
+- standardized labels: `tenant`, `app`, `environment`
+- tenant-scoped RBAC viewer role
+- tenant network policies and resource guardrails
 
-## Tradeoffs and choices
+## 5) Deployment Modes
 
-- Namespace isolation is practical for demos but not a hard security boundary.
-- Centralized observability reduces ops overhead but increases shared blast radius.
-- GitOps PRs provide auditability at the cost of extra CI workflow steps.
+### Local
 
-## What changes in AWS / hybrid (conceptual)
+- k3d cluster
+- script-driven install + verify
 
-- Replace local k3d with managed Kubernetes (EKS) and use IRSA for least-privilege access.
-- Push images to ECR (still lowercase naming) and mirror GitOps flow with the same PR model.
-- Optionally federate metrics/logs into a managed backend while keeping tenant labels intact.
+### VPS
+
+- Terraform bootstraps k3s + add-ons
+- kubeconfig copied locally for operations
+- NodePorts exposed for Argo/Grafana/Prometheus/Loki demos
+
+## 6) Security and Reliability Baselines
+
+- probes + resource requests/limits
+- PodDisruptionBudget
+- NetworkPolicy baseline
+- no secrets in repo
+- runtime credentials retrieved from cluster secrets
+
+## 7) Tradeoffs
+
+### Chosen
+
+- centralized observability stack
+- namespace-level tenancy
+- GitOps PR promotion model
+
+### Benefits
+
+- minimal operational overhead for demo
+- reproducible and auditable workflow
+- clear, explainable moving parts for interviews
+
+### Limitations
+
+- namespace isolation is not hard tenant isolation
+- centralized observability increases shared blast radius
+- NodePort exposure is demo-friendly, not production ingress/TLS best practice
+
+## 8) Failure Modes and Recovery Patterns
+
+- CI promotion PR blocked by repo permissions:
+  - build/push still succeeds
+  - workflow emits manual fallback commands
+- rollout stuck in restarting state:
+  - force pod rotation in tenant namespace
+- Argo login invalid from initial secret:
+  - reset password in `argocd-secret`, restart `argocd-server`
+
+## 9) AWS / Hybrid Extension (Conceptual)
+
+Without changing the core model:
+
+- k3s/k3d -> EKS or hybrid cluster
+- GHCR -> ECR (or dual-registry strategy)
+- NodePort demo access -> Ingress + TLS + WAF
+- centralized observability -> managed backends and/or per-tenant projects
+
+Core workflow (CI -> GitOps PR -> Argo reconcile -> rollout analysis) remains the same.
