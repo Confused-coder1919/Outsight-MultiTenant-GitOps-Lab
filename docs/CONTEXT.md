@@ -41,6 +41,7 @@ Core goals:
 ### Deployment Model
 
 - Helm chart: `charts/demo-api`
+- Shared baseline values: `charts/demo-api/values-common.yaml`
 - Argo CD Applications:
   - `gitops/argocd/tenant-a-app.yaml`
   - `gitops/argocd/tenant-b-app.yaml`
@@ -51,13 +52,13 @@ Core goals:
 ### Progressive Delivery
 
 - Workload type is `Rollout` (not Deployment)
-- Canary sequence:
-  - 10%
-  - pause 30s
-  - 50%
-  - pause 60s
-  - 100%
+- Tenant personas:
+  - `tenant-a` (Premium): `10% -> pause 30s -> analysis -> 50% -> pause 60s -> analysis -> 100%`
+  - `tenant-b` (Standard): `20% -> pause 15s -> analysis -> 100%`
 - Analysis with Prometheus metrics via `AnalysisTemplate`
+- Analysis args are tenant-specific:
+  - Premium: `maxErrorRate=0.005`, `maxP95LatencyMs=500`
+  - Standard: `maxErrorRate=0.02`, `maxP95LatencyMs=1200`
 - Abort/rollback on failed analysis
 
 ### Observability
@@ -169,6 +170,7 @@ Credentials come from secret `kube-prometheus-stack-grafana` in `observability` 
 - `scripts/open_demo_ports.sh` - exposes/prints all NodePort UI links
 - `scripts/verify.sh` - end-to-end cluster + app verification
 - `scripts/vps_status.sh` - concise status + URLs + credential commands
+- `scripts/demo_premium_vs_standard.sh` - deterministic premium vs standard comparison output
 - `scripts/canary-success.sh` - deterministic healthy canary demo
 - `scripts/canary_demo.sh` - deterministic failing canary demo with cleanup
 
@@ -188,6 +190,7 @@ Run in order:
 export KUBECONFIG=$(pwd)/infra/terraform/kubeconfig.yaml
 make rollouts-up
 make gitops
+make demo-compare
 make open-ports
 ./scripts/verify.sh
 ./scripts/vps_status.sh

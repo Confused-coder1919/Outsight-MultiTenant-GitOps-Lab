@@ -10,10 +10,16 @@ export KUBECONFIG=$(pwd)/infra/terraform/kubeconfig.yaml
 
 make rollouts-up
 make gitops
+make demo-compare
 make open-ports
 ./scripts/verify.sh
 ./scripts/vps_status.sh
 ```
+
+`make demo-compare` prints a deterministic Premium vs Standard tenant comparison:
+- rollout step weights
+- analysis thresholds (`maxErrorRate`, `maxP95LatencyMs`)
+- NetworkPolicy presence per tenant namespace
 
 Use URLs printed by `./scripts/vps_status.sh`:
 

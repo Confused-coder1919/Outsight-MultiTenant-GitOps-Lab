@@ -16,6 +16,7 @@ It is intentionally compact, but operationally realistic.
 
 - Multi-tenant Kubernetes delivery using namespace isolation (`tenant-a`, `tenant-b`)
 - Helm chart reuse with per-tenant values
+- Tenant personas with differentiated rollout gates and runtime guardrails
 - GitHub Actions CI/CD with GHCR publishing (`linux/amd64`, `linux/arm64`)
 - GitOps promotion flow via PR to tenant image tags
 - Progressive delivery (canary + analysis + rollback)
@@ -51,11 +52,26 @@ Prometheus/Grafana/Loki observe metrics + logs per tenant
 - Tests: `tests/test_main.py`
 - Container: `Dockerfile`
 - Chart: `charts/demo-api`
+  - Shared baseline: `charts/demo-api/values-common.yaml`
+  - Tenant overlays: `charts/demo-api/tenants/tenant-a-values.yaml`, `charts/demo-api/tenants/tenant-b-values.yaml`
 - Argo CD apps: `gitops/argocd`
 - Observability values: `observability/helm-values`
 - Automation scripts: `scripts/`
 - Infra bootstrap: `infra/terraform/`
 - Docs: `docs/`
+
+## Tenant Personas
+
+Both tenants run the same app image but use different policy profiles.
+
+- Premium (`tenant-a`):
+  - canary: `10% -> pause 30s -> analysis -> 50% -> pause 60s -> analysis -> 100%`
+  - stricter analysis thresholds (`maxErrorRate=0.005`, `maxP95LatencyMs=500`)
+  - stronger runtime controls (replicas/resources/network policy/alerts)
+- Standard (`tenant-b`):
+  - canary: `20% -> pause 15s -> analysis -> 100%`
+  - looser thresholds (`maxErrorRate=0.02`, `maxP95LatencyMs=1200`)
+  - lower-cost runtime profile
 
 ## CI/CD Behavior
 
@@ -81,9 +97,15 @@ export KUBECONFIG=$(pwd)/infra/terraform/kubeconfig.yaml
 
 make rollouts-up
 make gitops
+make demo-compare
 make open-ports
 ./scripts/verify.sh
 ```
+
+`make demo-compare` prints a deterministic tenant comparison:
+- rollout `setWeight` steps
+- analysis args (`maxErrorRate`, `maxP95LatencyMs`)
+- NetworkPolicy presence for each tenant
 
 ## Demo URLs
 

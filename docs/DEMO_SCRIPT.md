@@ -18,13 +18,20 @@ export KUBECONFIG=$(pwd)/infra/terraform/kubeconfig.yaml
 
 make rollouts-up
 make gitops
+make demo-compare
 make open-ports
 ./scripts/verify.sh
 ```
 
+`make demo-compare` is the first recruiter-facing step. It prints:
+- canary rollout step weights (`setWeight`) for tenant-a vs tenant-b
+- rollout analysis thresholds (`maxErrorRate`, `maxP95LatencyMs`)
+- whether NetworkPolicy is present in each tenant namespace
+
 ## 3) Show platform status
 
 ```bash
+make demo-compare
 ./scripts/vps_status.sh
 kubectl -n argocd get applications -o wide
 kubectl -n tenant-a get rollouts.argoproj.io,pods

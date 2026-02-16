@@ -21,6 +21,7 @@ Build a realistic, interview-ready platform demo that proves end-to-end DevOps o
 
 - namespace isolation (`tenant-a`, `tenant-b`)
 - shared chart with per-tenant values
+- premium vs standard tenant personas with distinct rollout/analysis/policy profiles
 - standardized labels for observability and operations
 
 ### CI/CD
@@ -51,6 +52,7 @@ Build a realistic, interview-ready platform demo that proves end-to-end DevOps o
 ### Automation and operations
 
 - idempotent scripts for bootstrap, verification, status, canary demos, and endpoint exposure
+- deterministic tenant comparison via `make demo-compare` for recruiter walkthroughs
 
 ## Key Results
 

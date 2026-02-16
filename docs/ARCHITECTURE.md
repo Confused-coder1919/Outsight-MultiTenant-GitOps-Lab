@@ -54,6 +54,17 @@ Code Push
   - p95 latency
 - failed analysis aborts promotion
 
+### Tenant Personas (Premium vs Standard)
+
+- Both tenants use one chart and one app image, with different value overlays.
+- Premium (`tenant-a`) uses stricter rollout and policy defaults:
+  - `10 -> pause -> analysis -> 50 -> pause -> analysis -> 100`
+  - tighter analysis thresholds and stronger alert/policy posture.
+- Standard (`tenant-b`) uses a cost-optimized profile:
+  - `20 -> pause -> analysis -> 100`
+  - looser thresholds and fewer enabled alerts.
+- Shared baseline values are centralized in `charts/demo-api/values-common.yaml`.
+
 ### Observability
 
 - Prometheus scrapes tenant ServiceMonitors

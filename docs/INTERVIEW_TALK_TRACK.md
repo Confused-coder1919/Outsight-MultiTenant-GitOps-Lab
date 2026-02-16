@@ -10,6 +10,8 @@ This project is intentionally small but operationally complete. The same FastAPI
 
 Argo CD watches the repository and reconciles changes declaratively. Instead of plain Deployments, I use Argo Rollouts with canary steps and Prometheus analysis to gate promotions. If analysis fails, rollout aborts automatically. For observability, Prometheus scrapes tenant metrics, Grafana visualizes tenant comparisons, and Loki queries logs by tenant labels.
 
+I also expose a deterministic `make demo-compare` step that prints the Premium vs Standard tenant rollout steps, analysis thresholds, and network policy posture before running live canary demos.
+
 The main point is to demonstrate reliable, auditable, and explainable platform operations, not just cluster setup.
 
 ## 5-minute technical walkthrough

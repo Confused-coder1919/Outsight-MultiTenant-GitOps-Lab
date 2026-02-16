@@ -34,6 +34,7 @@ For local k3d mode, use `make local-up` and `make local-verify`.
 ```bash
 make rollouts-up
 make gitops
+make demo-compare
 make open-ports
 ```
 
@@ -41,6 +42,7 @@ What this guarantees:
 
 - Argo Rollouts CRD/controller present
 - Argo CD Applications applied
+- Premium vs Standard tenant comparison printed
 - external NodePorts exposed for demo UIs
 
 ## 4) Verify Baseline Health
