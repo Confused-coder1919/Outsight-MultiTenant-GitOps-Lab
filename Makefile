@@ -4,7 +4,7 @@ TAG ?= dev
 
 .PHONY: lint test run docker-build docker-run k3d argocd observability gitops \
 	vps-up vps-verify vps-down local-up local-verify vps-status \
-	argo-rollouts rollouts-up canary-demo canary-success demo-traffic open-ports help
+	argo-rollouts rollouts-up canary-demo canary-success demo-traffic demo-compare open-ports help
 
 lint:
 	ruff check .
@@ -69,6 +69,9 @@ canary-success: rollouts-up
 demo-traffic:
 	./scripts/loadgen.sh --duration $${DURATION_SECONDS:-60}
 
+demo-compare:
+	./scripts/demo_premium_vs_standard.sh
+
 vps-status:
 	./scripts/vps_status.sh
 
@@ -91,4 +94,5 @@ help:
 	echo "  make canary-demo      Trigger canary failure and rollback demo"; \
 	echo "  make canary-success   Run healthy canary progression demo"; \
 	echo "  make demo-traffic     Generate healthy traffic for both tenants"; \
+	echo "  make demo-compare     Compare Premium vs Standard tenant personas"; \
 	echo "  make open-ports       Expose Argo/Grafana/Prometheus/Loki demo URLs"

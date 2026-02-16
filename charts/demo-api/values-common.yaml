@@ -1,0 +1,63 @@
+# Shared baseline values applied for all tenants before tenant-specific overrides.
+
+image:
+  repository: ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-api
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8000
+  targetPort: 8000
+
+appName: "demo-api"
+environment: "dev"
+
+demoFailureEndpoint:
+  enabled: false
+
+serviceMonitor:
+  enabled: true
+  interval: 15s
+  path: /metrics
+  labels:
+    release: kube-prometheus-stack
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+rollout:
+  enabled: true
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 420
+  progressDeadlineAbort: true
+  maxSurge: "25%"
+  maxUnavailable: 0
+  abortScaleDownDelaySeconds: 30
+  analysis:
+    enabled: true
+    interval: 30s
+    count: 3
+    failureLimit: 1
+    prometheusAddress: http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090
+
+networkPolicy:
+  enabled: true
+  allowIngressFromObservability: true
+  allowEgressToObservability: false
+
+rbac:
+  tenantViewer:
+    enabled: true
+    serviceAccountName: tenant-viewer
+    roleName: tenant-viewer
+  argocd:
+    enabled: true
+    namespace: argocd
+    serviceAccountName: argocd-application-controller
+    clusterRole: edit
+
+prometheusRule:
+  enabled: true
+  labels:
+    release: kube-prometheus-stack

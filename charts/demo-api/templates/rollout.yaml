@@ -18,24 +18,28 @@ spec:
       maxSurge: {{ .Values.rollout.maxSurge | quote }}
       maxUnavailable: {{ .Values.rollout.maxUnavailable }}
       abortScaleDownDelaySeconds: {{ .Values.rollout.abortScaleDownDelaySeconds }}
-      {{- if .Values.rollout.analysis.enabled }}
-      analysis:
-        templates:
-          - templateName: {{ include "demo-api.fullname" . }}-analysis
-        args:
-          - name: tenant
-            value: "{{ .Values.tenantName }}"
-          - name: namespace
-            value: "{{ .Release.Namespace }}"
-      {{- end }}
       steps:
-        - setWeight: {{ index .Values.rollout.canary.stepWeights 0 }}
+        {{- range $step := .Values.rollout.steps }}
+        - setWeight: {{ $step.setWeight }}
+        {{- if hasKey $step "pauseSeconds" }}
         - pause:
-            duration: {{ index .Values.rollout.canary.pauseSeconds 0 }}s
-        - setWeight: {{ index .Values.rollout.canary.stepWeights 1 }}
-        - pause:
-            duration: {{ index .Values.rollout.canary.pauseSeconds 1 }}s
-        - setWeight: 100
+            duration: {{ $step.pauseSeconds }}s
+        {{- end }}
+        {{- if and $.Values.rollout.analysis.enabled ($step.analysis | default false) }}
+        - analysis:
+            templates:
+              - templateName: {{ include "demo-api.fullname" $ }}-analysis
+            args:
+              - name: tenant
+                value: "{{ $.Values.tenantName }}"
+              - name: namespace
+                value: "{{ $.Release.Namespace }}"
+              - name: maxErrorRate
+                value: {{ $.Values.rollout.analysis.maxErrorRate | quote }}
+              - name: maxP95LatencyMs
+                value: {{ $.Values.rollout.analysis.maxP95LatencyMs | quote }}
+        {{- end }}
+        {{- end }}
   template:
     metadata:
       labels:

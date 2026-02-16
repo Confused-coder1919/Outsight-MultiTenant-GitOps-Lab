@@ -52,22 +52,28 @@ rollout:
   maxSurge: "25%"
   maxUnavailable: 0
   abortScaleDownDelaySeconds: 30
-  canary:
-    stepWeights:
-      - 10
-      - 50
-    pauseSeconds:
-      - 30
-      - 60
+  # Step sequence for Argo Rollouts canary progression.
+  steps:
+    - setWeight: 10
+      pauseSeconds: 30
+      analysis: true
+    - setWeight: 50
+      pauseSeconds: 60
+      analysis: true
+    - setWeight: 100
   analysis:
     enabled: true
     interval: 30s
     count: 3
     failureLimit: 1
-    successCondition5xx: "result[0] < 0.02"
-    successConditionP95: "result[0] < 0.5"
-    failureCondition5xx: "result[0] >= 0.02"
-    failureConditionP95: "result[0] >= 0.5"
+    # Threshold arguments injected into AnalysisTemplate queries.
+    maxErrorRate: 0.02
+    maxP95LatencyMs: 1200
+    # Conditions evaluate normalized values where <= 1 is healthy.
+    successCondition5xx: "result[0] <= 1"
+    successConditionP95: "result[0] <= 1"
+    failureCondition5xx: "result[0] > 1"
+    failureConditionP95: "result[0] > 1"
     # Prometheus service from kube-prometheus-stack in the observability namespace.
     prometheusAddress: http://kube-prometheus-stack-prometheus.observability.svc.cluster.local:9090
 
@@ -93,3 +99,27 @@ prometheusRule:
   enabled: true
   labels:
     release: kube-prometheus-stack
+  rules:
+    podRestarts:
+      enabled: true
+      threshold: 3
+      window: 10m
+      duration: 10m
+      severity: warning
+    highErrorRate:
+      enabled: true
+      threshold: 0.05
+      window: 5m
+      duration: 5m
+      severity: warning
+    highP95Latency:
+      enabled: true
+      thresholdSeconds: 0.8
+      window: 5m
+      duration: 5m
+      severity: warning
+    noTraffic:
+      enabled: true
+      window: 10m
+      duration: 15m
+      severity: warning

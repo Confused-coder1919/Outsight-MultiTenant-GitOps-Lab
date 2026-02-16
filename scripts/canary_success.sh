@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TENANT="${TENANT:-tenant-a}"
 VALUES_FILE="${ROOT_DIR}/charts/demo-api/tenants/${TENANT}-values.yaml"
+COMMON_VALUES_FILE="${ROOT_DIR}/charts/demo-api/values-common.yaml"
 ROLLOUT_NAME="${ROLLOUT_NAME:-demo-api}"
 SUCCESS_TAG="${SUCCESS_TAG:-}"
 WAIT_SECONDS="${WAIT_SECONDS:-300}"
@@ -120,6 +121,11 @@ if [[ ! -f "$VALUES_FILE" ]]; then
   echo "Values file not found: $VALUES_FILE" >&2
   exit 1
 fi
+
+HELM_VALUE_ARGS=(-f "$VALUES_FILE")
+if [[ -f "$COMMON_VALUES_FILE" ]]; then
+  HELM_VALUE_ARGS=(-f "$COMMON_VALUES_FILE" -f "$VALUES_FILE")
+fi
 if ! kubectl get namespace "$TENANT" >/dev/null 2>&1; then
   echo "Namespace ${TENANT} not found. Run make gitops first." >&2
   exit 1
@@ -154,13 +160,13 @@ cleanup() {
 
   if [[ "$revert_needed" == true ]]; then
     echo "Reverting ${TENANT} rollout to baseline chart values..."
-    helm template "$HELM_RELEASE" "${ROOT_DIR}/charts/demo-api" -n "$TENANT" -f "$VALUES_FILE" \
+    helm template "$HELM_RELEASE" "${ROOT_DIR}/charts/demo-api" -n "$TENANT" "${HELM_VALUE_ARGS[@]}" \
       | kubectl -n "$TENANT" apply -f - >/dev/null
 
     if ! wait_rollout_healthy 180; then
       echo "Rollout still not healthy after baseline apply; forcing rollout recreation..." >&2
       kubectl -n "$TENANT" delete rollouts.argoproj.io "$ROLLOUT_NAME" --ignore-not-found=true >/dev/null 2>&1 || true
-      helm template "$HELM_RELEASE" "${ROOT_DIR}/charts/demo-api" -n "$TENANT" -f "$VALUES_FILE" \
+      helm template "$HELM_RELEASE" "${ROOT_DIR}/charts/demo-api" -n "$TENANT" "${HELM_VALUE_ARGS[@]}" \
         | kubectl -n "$TENANT" apply -f - >/dev/null
       if ! wait_rollout_healthy 180; then
         local revert_phase
@@ -189,7 +195,7 @@ rollout:
 YAML
 
 echo "Applying canary success override for ${TENANT} (tag=${TARGET_TAG})..."
-helm template "$HELM_RELEASE" "${ROOT_DIR}/charts/demo-api" -n "$TENANT" -f "$VALUES_FILE" -f "$OVERRIDE_FILE" \
+helm template "$HELM_RELEASE" "${ROOT_DIR}/charts/demo-api" -n "$TENANT" "${HELM_VALUE_ARGS[@]}" -f "$OVERRIDE_FILE" \
   | kubectl -n "$TENANT" apply -f - >/dev/null
 
 echo "Generating healthy traffic for ${TRAFFIC_SECONDS}s..."

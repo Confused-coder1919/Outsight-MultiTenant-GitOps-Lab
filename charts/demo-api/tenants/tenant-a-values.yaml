@@ -6,3 +6,64 @@ image:
   repository: ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-api
   # CI updates this tag via PR to drive GitOps deployments.
   tag: "sha-5601734"
+
+# Premium tenant: tighter SLOs and stronger runtime isolation.
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+rollout:
+  steps:
+    - setWeight: 10
+      pauseSeconds: 30
+      analysis: true
+    - setWeight: 50
+      pauseSeconds: 60
+      analysis: true
+    - setWeight: 100
+  analysis:
+    enabled: true
+    maxErrorRate: 0.005
+    maxP95LatencyMs: 500
+
+networkPolicy:
+  enabled: true
+  allowIngressFromObservability: true
+  allowEgressToObservability: false
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+prometheusRule:
+  enabled: true
+  rules:
+    podRestarts:
+      enabled: true
+      threshold: 2
+      window: 10m
+      duration: 10m
+      severity: warning
+    highErrorRate:
+      enabled: true
+      threshold: 0.01
+      window: 5m
+      duration: 5m
+      severity: warning
+    highP95Latency:
+      enabled: true
+      thresholdSeconds: 0.5
+      window: 5m
+      duration: 5m
+      severity: warning
+    noTraffic:
+      enabled: true
+      window: 10m
+      duration: 15m
+      severity: warning

@@ -13,42 +13,70 @@ spec:
   groups:
     - name: demo-api.rules
       rules:
+        {{- if .Values.prometheusRule.rules.podRestarts.enabled }}
         - alert: DemoApiPodRestarts
-          expr: increase(kube_pod_container_status_restarts_total{namespace="{{ .Release.Namespace }}"}[10m]) > 3
-          for: 10m
+          expr: increase(kube_pod_container_status_restarts_total{namespace="{{ .Release.Namespace }}"}[{{ .Values.prometheusRule.rules.podRestarts.window }}]) > {{ .Values.prometheusRule.rules.podRestarts.threshold }}
+          for: {{ .Values.prometheusRule.rules.podRestarts.duration }}
           labels:
-            severity: warning
+            severity: {{ .Values.prometheusRule.rules.podRestarts.severity }}
             tenant: {{ .Values.tenantName }}
             app: {{ .Values.appName }}
             environment: {{ .Values.environment }}
           annotations:
             summary: "Pods restarting frequently in {{ .Release.Namespace }}"
-            description: "A container has restarted more than 3 times in the last 10 minutes."
+            description: "A container has restarted more than {{ .Values.prometheusRule.rules.podRestarts.threshold }} times in the last {{ .Values.prometheusRule.rules.podRestarts.window }}."
+        {{- end }}
+        {{- if .Values.prometheusRule.rules.highErrorRate.enabled }}
         - alert: DemoApiHighErrorRate
           expr: |
             (
-              sum(rate(http_requests_total{tenant="{{ .Values.tenantName }}",status=~"5.."}[5m]))
+              sum(rate(http_requests_total{tenant="{{ .Values.tenantName }}",status=~"5.."}[{{ .Values.prometheusRule.rules.highErrorRate.window }}]))
               /
-              sum(rate(http_requests_total{tenant="{{ .Values.tenantName }}"}[5m]))
-            ) > 0.05
-          for: 5m
+              clamp_min(
+                sum(rate(http_requests_total{tenant="{{ .Values.tenantName }}"}[{{ .Values.prometheusRule.rules.highErrorRate.window }}])),
+                0.001
+              )
+            ) > {{ .Values.prometheusRule.rules.highErrorRate.threshold }}
+          for: {{ .Values.prometheusRule.rules.highErrorRate.duration }}
           labels:
-            severity: warning
+            severity: {{ .Values.prometheusRule.rules.highErrorRate.severity }}
             tenant: {{ .Values.tenantName }}
             app: {{ .Values.appName }}
             environment: {{ .Values.environment }}
           annotations:
             summary: "High 5xx error rate for {{ .Values.tenantName }}"
-            description: "More than 5% of requests are 5xx over 5 minutes."
-        - alert: DemoApiNoTraffic
-          expr: sum(rate(http_requests_total{tenant="{{ .Values.tenantName }}"}[10m])) == 0
-          for: 15m
+            description: "Error rate is above {{ .Values.prometheusRule.rules.highErrorRate.threshold }} over {{ .Values.prometheusRule.rules.highErrorRate.window }}."
+        {{- end }}
+        {{- if .Values.prometheusRule.rules.highP95Latency.enabled }}
+        - alert: DemoApiHighP95Latency
+          expr: |
+            histogram_quantile(
+              0.95,
+              sum by (le) (
+                rate(http_request_duration_seconds_bucket{tenant="{{ .Values.tenantName }}"}[{{ .Values.prometheusRule.rules.highP95Latency.window }}])
+              )
+            ) > {{ .Values.prometheusRule.rules.highP95Latency.thresholdSeconds }}
+          for: {{ .Values.prometheusRule.rules.highP95Latency.duration }}
           labels:
-            severity: warning
+            severity: {{ .Values.prometheusRule.rules.highP95Latency.severity }}
+            tenant: {{ .Values.tenantName }}
+            app: {{ .Values.appName }}
+            environment: {{ .Values.environment }}
+          annotations:
+            summary: "High p95 latency for {{ .Values.tenantName }}"
+            description: "p95 latency is above {{ .Values.prometheusRule.rules.highP95Latency.thresholdSeconds }}s over {{ .Values.prometheusRule.rules.highP95Latency.window }}."
+        {{- end }}
+        {{- if .Values.prometheusRule.rules.noTraffic.enabled }}
+        - alert: DemoApiNoTraffic
+          expr: sum(rate(http_requests_total{tenant="{{ .Values.tenantName }}"}[{{ .Values.prometheusRule.rules.noTraffic.window }}])) == 0
+          for: {{ .Values.prometheusRule.rules.noTraffic.duration }}
+          labels:
+            severity: {{ .Values.prometheusRule.rules.noTraffic.severity }}
             tenant: {{ .Values.tenantName }}
             app: {{ .Values.appName }}
             environment: {{ .Values.environment }}
           annotations:
             summary: "No traffic for {{ .Values.tenantName }}"
-            description: "No requests observed in the last 15 minutes."
+            description: "No requests observed in the last {{ .Values.prometheusRule.rules.noTraffic.duration }}."
+        {{- end }}
 {{- end }}

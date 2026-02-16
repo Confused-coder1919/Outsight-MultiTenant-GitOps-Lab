@@ -12,6 +12,7 @@ spec:
     path: charts/demo-api
     helm:
       valueFiles:
+        - values-common.yaml
         # Tenant values live under the chart to avoid path traversal issues.
         - tenants/tenant-a-values.yaml
   destination:
