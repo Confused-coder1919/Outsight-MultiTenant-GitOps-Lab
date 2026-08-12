@@ -13,7 +13,7 @@ Use this script to run a clean 8-10 minute interview demo.
 ## 2) Pre-demo prep
 
 ```bash
-cd /Users/syedtashfin/Documents/GitHub/outsight-platform-devops-demo
+cd /path/to/Outsight-MultiTenant-GitOps-Lab
 export KUBECONFIG=$(pwd)/infra/terraform/kubeconfig.yaml
 
 make rollouts-up

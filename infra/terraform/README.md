@@ -44,7 +44,7 @@ You can set them via env vars:
 export TF_VAR_VPS_IP="203.0.113.10"
 export TF_VAR_VPS_USER="ubuntu"
 export TF_VAR_SSH_KEY_PATH="$HOME/.ssh/id_rsa"
-export TF_VAR_GITOPS_REPO="https://github.com/you/outsight-platform-devops-demo.git"
+export TF_VAR_GITOPS_REPO="https://github.com/SyedTashfin/Outsight-MultiTenant-GitOps-Lab.git"
 export TF_VAR_GITOPS_REVISION="main"
 ```
 
@@ -54,7 +54,7 @@ Or create a `terraform.tfvars`:
 VPS_IP       = "203.0.113.10"
 VPS_USER     = "ubuntu"
 SSH_KEY_PATH = "/home/me/.ssh/id_rsa"
-GITOPS_REPO  = "https://github.com/you/outsight-platform-devops-demo.git"
+GITOPS_REPO  = "https://github.com/SyedTashfin/Outsight-MultiTenant-GitOps-Lab.git"
 GITOPS_REVISION = "main"
 ```
 

@@ -5,7 +5,7 @@ Two runnable paths are supported.
 ## VPS Path (recommended for interview demo)
 
 ```bash
-cd /Users/syedtashfin/Documents/GitHub/outsight-platform-devops-demo
+cd /path/to/Outsight-MultiTenant-GitOps-Lab
 export KUBECONFIG=$(pwd)/infra/terraform/kubeconfig.yaml
 
 make rollouts-up
@@ -31,7 +31,7 @@ Use URLs printed by `./scripts/vps_status.sh`:
 ## Local Path (k3d)
 
 ```bash
-cd /Users/syedtashfin/Documents/GitHub/outsight-platform-devops-demo
+cd /path/to/Outsight-MultiTenant-GitOps-Lab
 make local-up
 make local-verify
 ```

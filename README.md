@@ -1,6 +1,10 @@
-# Outsight Platform DevOps Demo
+# Multi-Tenant GitOps Platform Lab
 
-A recruiter-grade, end-to-end DevOps platform demo for a multi-tenant SaaS-style workload on Kubernetes.
+A production-style platform engineering lab for a multi-tenant SaaS-style workload on Kubernetes.
+
+> **Scope:** this is a lab, not a live enterprise platform. It demonstrates a reproducible delivery and operations model without claiming production traffic, uptime, MTTR, or hard tenant isolation.
+
+**Flagship case study:** [architecture, design decisions, rollback behavior, and verification evidence](https://syedtashfin.com/case-studies/cicd-gitops-multitenant-kubernetes-saas)
 
 This repository demonstrates the full operating loop:
 
@@ -92,7 +96,8 @@ Important repository setting for GitOps PR automation:
 ## Quick Start (VPS)
 
 ```bash
-cd /Users/syedtashfin/Documents/GitHub/outsight-platform-devops-demo
+git clone https://github.com/SyedTashfin/Outsight-MultiTenant-GitOps-Lab.git
+cd Outsight-MultiTenant-GitOps-Lab
 export KUBECONFIG=$(pwd)/infra/terraform/kubeconfig.yaml
 
 make rollouts-up

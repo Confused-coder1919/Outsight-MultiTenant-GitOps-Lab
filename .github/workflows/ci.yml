@@ -16,7 +16,7 @@ permissions:
   pull-requests: write
 
 env:
-  IMAGE_REPO: ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-api
+  IMAGE_REPO: ghcr.io/syedtashfin/outsight-multitenant-gitops-lab/demo-api
   PYTHON_VERSION: "3.11"
 
 jobs:

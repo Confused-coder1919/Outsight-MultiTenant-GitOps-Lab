@@ -6,7 +6,7 @@ If you know nothing about this repository, start here.
 
 ## 1) Project Intent
 
-`outsight-platform-devops-demo` is an interview-ready DevOps/Platform demonstration of a multi-tenant SaaS deployment model on Kubernetes.
+`Outsight-MultiTenant-GitOps-Lab` is a production-style DevOps/Platform lab for a multi-tenant SaaS deployment model on Kubernetes.
 
 It is built to show practical operational capability, not product complexity.
 

@@ -6,8 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    # Point this to your fork so Argo CD can pull the chart and values.
-    repoURL: https://github.com/Confused-coder1919/outsight-platform-devops-demo.git
+    repoURL: https://github.com/SyedTashfin/Outsight-MultiTenant-GitOps-Lab.git
     targetRevision: main
     path: charts/demo-api
     helm:

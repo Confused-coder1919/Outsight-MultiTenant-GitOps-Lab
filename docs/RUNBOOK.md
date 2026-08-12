@@ -22,7 +22,7 @@ make help
 For VPS mode:
 
 ```bash
-cd /Users/syedtashfin/Documents/GitHub/outsight-platform-devops-demo
+cd /path/to/Outsight-MultiTenant-GitOps-Lab
 export KUBECONFIG=$(pwd)/infra/terraform/kubeconfig.yaml
 kubectl get nodes
 ```
