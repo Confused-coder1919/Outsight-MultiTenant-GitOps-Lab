@@ -1,5 +1,7 @@
 # Multi-Tenant GitOps Platform Lab
 
+![Multi-Tenant GitOps Delivery Lab — CI, GitOps, Argo CD, Prometheus gates, and rollback](assets/linkedin-featured-cover.png)
+
 A production-style platform engineering lab for a multi-tenant SaaS-style workload on Kubernetes.
 
 > **Scope:** this is a lab, not a live enterprise platform. It demonstrates a reproducible delivery and operations model without claiming production traffic, uptime, MTTR, or hard tenant isolation.
