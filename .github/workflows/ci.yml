@@ -2,6 +2,12 @@ name: CI
 
 on:
   pull_request:
+    # Skip auto-promotion PRs (tenant values only) and docs-only changes.
+    paths-ignore:
+      - charts/demo-api/tenants/**
+      - docs/**
+      - assets/**
+      - README.md
   push:
     branches:
       - main
@@ -24,6 +30,7 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -46,6 +53,7 @@ jobs:
 
   build-publish-promote:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: test
     if: "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !startsWith(github.event.head_commit.message || '', 'chore(gitops): bump demo-api to sha-') }}"
     outputs:
