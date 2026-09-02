@@ -8,7 +8,9 @@ on:
     # Prevent recursive image-bump loops when the GitOps PR merges.
     paths-ignore:
       - charts/demo-api/tenants/**
-      - gitops/tenants/**
+      - docs/**
+      - assets/**
+      - README.md
 
 permissions:
   contents: write

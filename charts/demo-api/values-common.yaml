@@ -1,7 +1,7 @@
 # Shared baseline values applied for all tenants before tenant-specific overrides.
 
 image:
-  repository: ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-api
+  repository: ghcr.io/syedtashfin/outsight-multitenant-gitops-lab/demo-api
   pullPolicy: IfNotPresent
 
 service:

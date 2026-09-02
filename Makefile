@@ -1,5 +1,5 @@
 APP_NAME := demo-api
-IMAGE_NAME ?= ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-api
+IMAGE_NAME ?= ghcr.io/syedtashfin/outsight-multitenant-gitops-lab/demo-api
 TAG ?= dev
 
 .PHONY: lint test run docker-build docker-run k3d argocd observability gitops \

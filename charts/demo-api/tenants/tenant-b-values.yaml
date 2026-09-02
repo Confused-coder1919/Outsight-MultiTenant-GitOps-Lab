@@ -3,9 +3,9 @@ tenantName: "tenant-b"
 
 image:
   # Keep in sync with .github/workflows/ci.yml IMAGE_REPO.
-  repository: ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-api
+  repository: ghcr.io/syedtashfin/outsight-multitenant-gitops-lab/demo-api
   # CI updates this tag via PR to drive GitOps deployments.
-  tag: "sha-5601734"
+  tag: "sha-2abcff1"
 
 # Standard tenant: lower cost profile with relaxed SLO thresholds.
 replicaCount: 1

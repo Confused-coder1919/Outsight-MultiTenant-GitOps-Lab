@@ -1,8 +1,8 @@
 replicaCount: 1
 
 image:
-  # Defaults for a demo; overridden per tenant in gitops/tenants/.
-  repository: ghcr.io/confused-coder1919/outsight-platform-devops-demo/demo-api
+  # Defaults for a demo; overridden per tenant in charts/demo-api/tenants/.
+  repository: ghcr.io/syedtashfin/outsight-multitenant-gitops-lab/demo-api
   tag: "dev"
   pullPolicy: IfNotPresent
 
