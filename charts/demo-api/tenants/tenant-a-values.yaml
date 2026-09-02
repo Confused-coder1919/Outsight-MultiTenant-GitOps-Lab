@@ -4,7 +4,7 @@ image:
   # Keep in sync with .github/workflows/ci.yml IMAGE_REPO.
   repository: ghcr.io/syedtashfin/outsight-multitenant-gitops-lab/demo-api
   # CI updates this tag via PR to drive GitOps deployments.
-  tag: "sha-46189f7"
+  tag: "sha-6e1592e"
 # Premium tenant: tighter SLOs and stronger runtime isolation.
 replicaCount: 2
 resources:
