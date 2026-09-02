@@ -1,15 +1,12 @@
 # Tenant-specific value used in responses and metrics labels.
 tenantName: "tenant-a"
-
 image:
   # Keep in sync with .github/workflows/ci.yml IMAGE_REPO.
   repository: ghcr.io/syedtashfin/outsight-multitenant-gitops-lab/demo-api
   # CI updates this tag via PR to drive GitOps deployments.
-  tag: "sha-2abcff1"
-
+  tag: "sha-46189f7"
 # Premium tenant: tighter SLOs and stronger runtime isolation.
 replicaCount: 2
-
 resources:
   requests:
     cpu: 200m
@@ -17,7 +14,6 @@ resources:
   limits:
     cpu: 500m
     memory: 512Mi
-
 rollout:
   steps:
     - setWeight: 10
@@ -31,16 +27,13 @@ rollout:
     enabled: true
     maxErrorRate: 0.005
     maxP95LatencyMs: 500
-
 networkPolicy:
   enabled: true
   allowIngressFromObservability: true
   allowEgressToObservability: false
-
 podDisruptionBudget:
   enabled: true
   minAvailable: 1
-
 prometheusRule:
   enabled: true
   rules:
